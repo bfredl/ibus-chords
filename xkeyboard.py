@@ -11,10 +11,11 @@ IDLE = 0
 GRABBED = 1
 PASS_THRU = 2
 
-class keyboardGrabber(object):
+class KeyboardGrabber(object):
     def __init__(self):
         self.display = Display()
         self.root = self.display.screen().root
+        self.target = self.display.get_input_focus()._data["focus"]
 
         #TODO: use key classes/categories/whatever
         self.grab_mask = [XK.XK_Control_L, XK.XK_Control_R, XK.XK_Alt_L] 
@@ -32,7 +33,7 @@ class keyboardGrabber(object):
             self.display.allow_events(X.AsyncKeyboard, X.CurrentTime)
 
     def _handle_event(self,ev):
-        print ev
+        print self.state, self.pressed, ev.type, ev.detail
         if self.state == IDLE:
             self._new_sequence(ev)
 
@@ -40,14 +41,13 @@ class keyboardGrabber(object):
             self._sequence_event(ev)
         else:
             self._passthru_event(ev)
-        print self.state, self.pressed
 
     def _new_sequence(self,ev):
         assert ev.type == X.KeyPress
         #this logic shall move outside the X layer
         #if self.on_sequence_new(ev):
         key = self.display.keycode_to_keysym(ev.detail,0)
-        print key, XK.XK_Alt_L
+        self.on_sequence_new(ev.detail,ev.state,ev.time)
         if key in self.grab_mask or ev.state & 4:
             self.state = PASS_THRU
         else:
@@ -56,23 +56,22 @@ class keyboardGrabber(object):
     def _sequence_event(self,ev):
         if  ev.type == X.KeyPress:
             self.pressed += 1
-            self.on_press(ev)
+            self.on_press(ev.detail,ev.state,ev.time)
         elif ev.type == X.KeyRelease:
             ev2 = None
             if self.display.pending_events():
                 ev2 = self.display.next_event()
-                print ev2
                 if ev2.type == X.KeyPress and ev2.time == ev.time and ev2.detail == ev.detail:
-                    self.on_repeat(ev2)
+                    self.on_repeat(ev.detail,ev.state,ev.time)
                     return
 
             self.pressed -= 1
             if self.pressed == 0:
                 self.state = IDLE
             # on_release might set state
-            self.on_release(ev)
+            self.on_release(ev.detail,ev.state,ev.time)
             if ev2 is not None:
-                self._sequence_event(ev2)
+                self._handle_event(ev2)
 
     def _passthru_event(self,ev):
         window = self.get_target()
@@ -87,20 +86,19 @@ class keyboardGrabber(object):
                 # we need to handle this to not underflow self.pressed
                 if ev2.type == X.KeyPress and ev2.time == ev.time and ev2.detail == ev.detail:
                     window.send_event(ev2)
-                else:
-                    self.pressed -= 1
-                    self._passthru_event(ev2)
-            else:
-                self.pressed -= 1
-        assert self.pressed >=0
-        if self.pressed == 0:
-            self.state = IDLE
+                    return
+            self.pressed -= 1
+            assert self.pressed >=0
+            if self.pressed == 0:
+                self.state = IDLE
+            if ev2 is not None:
+                self._handle_event(ev2)
 
     # on_... should be overidden
-    def on_press(self,ev):
+    def on_press(self,keycode,state,time):
         print "PRESS", ev.detail, ev.state
 
-    def on_release(self,ev):
+    def on_release(self,keykode,state,time):
         print "RELEASE", ev.detail, ev.state
         if ev.detail == 10:
             self.send_key('1')
@@ -108,12 +106,12 @@ class keyboardGrabber(object):
         if sym0 == XK.XK_Escape:
             sys.exit(0)
 
-    def on_repeat(self,ev):
+    def on_repeat(self,keycode,state,time):
         #print "REPEAT", ev
         pass
 
     def get_target(self):
-        return self.display.get_input_focus()._data["focus"]
+        return self.target
 
     def fake_event(self,typeof,keycode,shift_state=0,window=None):
         if window is None:
