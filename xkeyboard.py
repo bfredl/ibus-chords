@@ -1,8 +1,6 @@
-
-from Xlib import X, XK
-from Xlib.display import Display
-from Xlib.ext import record, xtest
-from Xlib.protocol import rq, event
+from Xlib import X,XK
+import xcb, xcb.xproto as xproto 
+#import xcb.xinput
 
 import time, sys
 
@@ -13,9 +11,13 @@ PASS_THRU = 2
 
 class KeyboardGrabber(object):
     def __init__(self):
-        self.display = Display()
+        self.conn = xcb.connect()
+        self.X = self.conn.core
+        #self.XI = self.conn(xcb.xinput.key)
+        root = self.conn.get_setup().roots[0]
         self.root = self.display.screen().root
-        self.target = self.display.get_input_focus()._data["focus"]
+        self.target = self.X.GetInputFocus().reply().focus
+
 
         #TODO: use key classes/categories/whatever
         self.grab_mask = [XK.XK_Control_L, XK.XK_Control_R, XK.XK_Alt_L] 
@@ -23,7 +25,7 @@ class KeyboardGrabber(object):
     def run(self):
         grab_window = self.get_target()
         #grab_window.change_attributes(event_mask = X.KeyPressMask|X.KeyReleaseMask)
-        grab_window.grab_key(X.AnyKey, X.AnyModifier, True,X.GrabModeSync, X.GrabModeSync)
+        self.X.GrabKey(grab_window,0,0,True, True,xproto.GrabMode.Sync, X.GrabMode.Sync)
 
         self.state = 0
         self.pressed = 0
