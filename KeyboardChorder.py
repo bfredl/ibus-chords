@@ -1,4 +1,5 @@
 from xkeyboard import KeyboardGrabber
+from Xlib import XK
 
 IDLE = 0
 READY = 0
@@ -7,59 +8,57 @@ READY = 0
 class KeyboardChorder(object):
     def __init__(self):
         self.kb = KeyboardGrabber(self)
-        self.ds = []
         self.modThreshold = 300
-        self.chordTreshold = 300
+        self.chordTreshold = 2.0
 
     def run(self):
         self.state = IDLE
         try:
             self.kb.run()
         except KeyboardInterrupt:
-            print repr(self.ds)
+            pass
             
        
-    def on_new_sequence(self, *a):
+    def on_new_sequence(self, keycode, state):
+        keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
+        if keysym == XK.XK_Shift_L:
+            return False
         self.seq = []
         self.times = []
         self.dead = set()
         return True
 
     def on_press(self,keycode,state,time,pressed):
-        keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
-        self.seq.append(keysym)
+        self.seq.append(keycode)
         self.times.append(time)
         self.last_time = time
 
     def on_release(self,keycode,state,time,pressed):
-        keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
-        if keysym in self.dead:
-            self.dead.remove(keysym)
+        if keycode in self.dead:
+            self.dead.remove(keycode)
         else:
-            if self.is_chord(time,keysym): # 
+            if self.is_chord(time,keycode): # 
                 self.emit_chord()
-                self.dead.update([k for k in self.seq if k != keysym])
+                self.dead.update([k for k in self.seq if k != keycode])
             else:
                 self.emit_key(keycode,state)
-        self.seq.remove(keysym)
+        self.seq.remove(keycode)
 
     def on_repeat(self, *a):
         pass # (:
 
-    def is_chord(self,time,keysym=None):
+    def is_chord(self,time,keycode=None):
         n = len(self.seq)
         if len(self.dead) > 0:
             return True # not _completely_ correct, but
         if n == 1:
             return time - self.last_time >= 300
         if n == 2:
-            if keysym == self.seq[1]:
+            if keycode == self.seq[1]:
                 return True
             t0, t1 = self.times[-2:]
             t2 = time
-            #print t2-t1, t1-t0
-            self.ds.append((t2-t0,t1-t0))
-            return False#t2-t1 > 2*(t1-t0) #test
+            return t2-t1 > 2*(t1-t0) #test
 
     def emit_key(self,keycode,state):
         self.kb.fake_event(2,keycode,state)
@@ -68,7 +67,13 @@ class KeyboardChorder(object):
 
     def emit_chord(self):
         chord = sorted(self.seq)
-        print chord
+        #keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
+        if len(chord) == 1:
+            keycode, = chord
+            self.kb.fake_event(2,keycode,4)
+            self.kb.fake_event(3,keycode,4)
+        else:
+            print chord
 
 if __name__ == "__main__":
     KeyboardChorder().run()
