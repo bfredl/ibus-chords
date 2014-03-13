@@ -11,18 +11,22 @@ IDLE = 0
 GRABBED = 1
 PASS_THRU = 2
 
+# Still leaks X abstraction (like any of your favourite X11 toolkit)
+# bcuz "one does not simply" abstract away x keyboard semantics
+# But wayland is xkb based anyways...
 class KeyboardGrabber(object):
-    def __init__(self):
+    def __init__(self,reciever):
         self.conn = xcb.connect()
         self.X = self.conn.core
         #self.XI = self.conn(xcb.xinput.key)
         self.root = self.conn.get_setup().roots[0]
         self.target = self.X.GetInputFocus().reply().focus
 
-
-        #TODO: use key classes/categories/whatever
-        self.grab_mask = [XK.XK_Control_L, XK.XK_Control_R, XK.XK_Alt_L] 
+        #self.grab_mask = [XK.XK_Control_L, XK.XK_Control_R, XK.XK_Alt_L] 
         self._update_keymap()
+
+        # don't make reciever false plz
+        self.reciever = reciever 
 
     def run(self):
         grab_window = self.get_target()
@@ -48,33 +52,34 @@ class KeyboardGrabber(object):
     def _new_sequence(self,ev):
         assert isinstance(ev, KeyPressEvent)
         grab_window = self.get_target()
-        #self.X.GrabKeyboardChecked(True, grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).check()
-        #this logic shall move outside the X layer
-        #if self.on_sequence_new(ev):
-        # FIXME XXX use xpyutil
+
+        #Trust me, this is neccessary 
+        grab = self.X.GrabKeyboard(True, grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).reply()
         key = self.keycode_to_keysym(ev.detail,0)
         #self.on_sequence_new(ev.detail,ev.state,ev.time)
-        if key in self.grab_mask or ev.state & 4:
-            self.state = PASS_THRU
-        else:
+        
+        if self.reciever.on_new_sequence(ev.detail,ev.state):
             self.state = GRABBED
+        else:
+            self.state = PASS_THRU
 
     def _sequence_event(self,ev):
         if  isinstance(ev, KeyPressEvent):
             self.pressed += 1
-            self.on_press(ev.detail,ev.state,ev.time)
+            self.reciever.on_press(ev.detail,ev.state,ev.time,self.pressed)
         elif isinstance(ev, KeyReleaseEvent):
             ev2 = self.conn.poll_for_event()
             if ev2 != None:
                 if isinstance(ev2, KeyPressEvent) and ev2.time == ev.time and ev2.detail == ev.detail:
-                    self.on_repeat(ev.detail,ev.state,ev.time)
+                    self.reciever.on_repeat(ev.detail,ev.state,ev.time)
                     return
 
             self.pressed -= 1
             if self.pressed == 0:
+                self.X.UngrabKeyboard(X.CurrentTime)
                 self.state = IDLE
             # on_release might set state
-            self.on_release(ev.detail,ev.state,ev.time)
+            self.reciever.on_release(ev.detail,ev.state,ev.time,self.pressed)
             if ev2 is not None:
                 self._handle_event(ev2)
         else:
@@ -98,25 +103,6 @@ class KeyboardGrabber(object):
                 self.state = IDLE
             if ev2 is not None:
                 self._handle_event(ev2)
-
-    # on_... should be overidden
-    def on_press(self,keycode,state,time):
-        print "PRESS", keycode, state, self.pressed
-
-    def on_release(self,keycode,state,time):
-        print "RELEASE", keycode, state, self.pressed
-        if keycode == 10:
-            self.send_key('1')
-        sym0 = self.keycode_to_keysym(keycode,0)
-        if sym0 == XK.XK_Escape:
-            sys.exit(0)
-
-    def on_repeat(self,keycode,state,time):
-        #print "REPEAT", ev
-        pass
-
-    def get_target(self):
-        return self.target
 
     def send_event(self,ev,window=None):
         if window is None:
@@ -142,7 +128,7 @@ class KeyboardGrabber(object):
             )
         self.send_event(ev,window)
 
-    #TODO: stop NIH:ing, use libxcbcommon, or something else sanity-preserving 
+    #TODO: stop NIH:ing, use libxkbcommon, or something else sanity-preserving 
     def _update_keymap(self):
         setup = self.conn.get_setup()
         self.min_keycode = setup.min_keycode  
@@ -165,8 +151,37 @@ class KeyboardGrabber(object):
         self.fake_event(KeyPressEvent, keycode,window=self.get_target())
         self.fake_event(KeyReleaseEvent, keycode,window=self.get_target())
 
+    def get_target(self):
+        return self.target
+
+class Test:
+    def run(self):
+        self.kb = KeyboardGrabber(self)
+        self.kb.run()
+    # these are for testing
+    def on_new_sequence(self,keycode,state):
+        print "NEU", keycode, state 
+        return True#not (state & 4)
+
+    def on_press(self,keycode,state,keysym,time,pressed):
+        print "PRESS", keycode, state, pressed
+
+    def on_release(self,keycode,state,keysym,time,pressed):
+        print "RELEASE", keycode, state, pressed
+        if keycode == 10:
+            self.kb.send_key('1')
+        sym0 = self.kb.keycode_to_keysym(keycode,0)
+        if sym0 == XK.XK_Escape:
+            sys.exit(0)
+
+    def on_repeat(self,keycode,state,time):
+        #print "REPEAT", ev
+        pass
+
+
+
 def xKeyEvent(typeof,detail,seq,time, root, window, child, root_x, root_y, event_x, event_y, state, same_screen):
     return struct.pack('BBhIIIIhhhhHBx', typeof,detail,seq,time, root, window, child, root_x, root_y, event_x, event_y, state, same_screen)
 
 if __name__ == "__main__":
-    KeyboardGrabber().run()
+    Test().run()
