@@ -33,12 +33,17 @@ class KeyboardGrabber(object):
         #grab_window.change_attributes(event_mask = X.KeyPressMask|X.KeyReleaseMask)
         self.X.GrabKeyChecked(True, grab_window,0,0,xproto.GrabMode.Sync, xproto.GrabMode.Sync).check()
 
-        self.state = 0
-        self.pressed = 0
-        while 1:
-            ev = self.conn.wait_for_event()
-            self._handle_event(ev)
-            self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
+        try:
+            self.state = 0
+            self.pressed = 0
+            while 1:
+                ev = self.conn.wait_for_event()
+                self._handle_event(ev)
+                self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
+        finally:
+            if self.state != 0:
+                self.X.UngrabKeyboard(X.CurrentTime)
+            self.X.UngrabKey(0,self.get_target(),0)
 
     def _handle_event(self,ev):
         if self.state == IDLE:
@@ -54,7 +59,8 @@ class KeyboardGrabber(object):
         grab_window = self.get_target()
 
         #Trust me, this is neccessary 
-        grab = self.X.GrabKeyboard(True, grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).reply()
+        self.X.GrabKeyboard(True, grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).reply()
+        self.state = GRABBED
         key = self.keycode_to_keysym(ev.detail,0)
         #self.on_sequence_new(ev.detail,ev.state,ev.time)
         
@@ -111,6 +117,8 @@ class KeyboardGrabber(object):
 
     def fake_event(self,typeof,keycode,shift_state=0,window=None):
         #whatif window == root, possible?
+        if window is None:
+            window = self.get_target()
         if typeof == KeyPressEvent:
             typeof = 2
         elif typeof == KeyReleaseEvent:
