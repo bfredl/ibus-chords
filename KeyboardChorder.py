@@ -52,17 +52,16 @@ class KeyboardChorder(object):
         if len(self.dead) > 0:
             return True # not _completely_ correct, but
         if n == 1:
-            return time - self.last_time >= 300
+            return time - self.last_time >= self.modThreshold
         if n == 2:
-            if keycode == self.seq[1]:
+            if keycode == self.seq[1]: # ab|ba is always chord
                 return True
             t0, t1 = self.times[-2:]
             t2 = time
-            return t2-t1 > 2*(t1-t0) #test
+            return t2-t1 > (self.chordTreshold)*(t1-t0) 
 
     def emit_key(self,keycode,state):
-        self.kb.fake_event(2,keycode,state)
-        self.kb.fake_event(3,keycode,state)
+        self.kb.fake_stroke(keycode,state)
         #print "EMIT", keycode, state
 
     def emit_chord(self):
@@ -70,9 +69,11 @@ class KeyboardChorder(object):
         #keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
         if len(chord) == 1:
             keycode, = chord
-            self.kb.fake_event(2,keycode,4)
-            self.kb.fake_event(3,keycode,4)
+            self.kb.fake_stroke(keycode,4)
         else:
+            self.kb.fake_stroke(self.ch_code,self.ch_state)
+            for key in chord:
+                self.kb.fake_stroke(key,0)
             print chord
 
 if __name__ == "__main__":
