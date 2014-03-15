@@ -8,8 +8,14 @@ READY = 0
 class KeyboardChorder(object):
     def __init__(self):
         self.kb = KeyboardGrabber(self)
-        self.modThreshold = 300
+        self.modThreshold = 200
         self.chordTreshold = 2.0
+
+        self.remap = {
+            (41,45): (29,0),
+            (40,44): (29,1)
+        }
+        self.ch_code = (53,0x80)
 
     def run(self):
         self.state = IDLE
@@ -22,7 +28,7 @@ class KeyboardChorder(object):
     def on_new_sequence(self, keycode, state):
         keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
         if keysym == XK.XK_Shift_L:
-            return False
+            pass#return False #FIXME
         self.seq = []
         self.times = []
         self.dead = set()
@@ -37,8 +43,7 @@ class KeyboardChorder(object):
         if keycode in self.dead:
             self.dead.remove(keycode)
         else:
-            if self.is_chord(time,keycode): # 
-                self.emit_chord()
+            if self.is_chord(time,keycode) and self.emit_chord():
                 self.dead.update([k for k in self.seq if k != keycode])
             else:
                 self.emit_key(keycode,state)
@@ -65,16 +70,26 @@ class KeyboardChorder(object):
         #print "EMIT", keycode, state
 
     def emit_chord(self):
-        chord = sorted(self.seq)
+        chord = tuple(sorted(self.seq))
         #keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
+        if chord in self.remap:
+            val = self.remap[chord]
+            self.kb.fake_stroke(*val)
+            return True
+
+
         if len(chord) == 1:
             keycode, = chord
-            self.kb.fake_stroke(keycode,4)
+            self.kb.fake_stroke(keycode,1)
+            return True
         else:
-            self.kb.fake_stroke(self.ch_code,self.ch_state)
+            return False
+            self.kb.fake_stroke(*self.ch_code)
             for key in chord:
                 self.kb.fake_stroke(key,0)
-            print chord
+            print ""
 
 if __name__ == "__main__":
+    import time
+    time.sleep(3)
     KeyboardChorder().run()

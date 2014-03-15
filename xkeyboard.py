@@ -135,6 +135,9 @@ class KeyboardGrabber(object):
             detail = keycode
             )
         self.send_event(ev,window)
+    def fake_stroke(self,keycode,shift_state=0,window=None):
+        self.fake_event(2,keycode,shift_state,window)
+        self.fake_event(3,keycode,shift_state,window)
 
     #TODO: stop NIH:ing, use libxkbcommon, or something else sanity-preserving 
     def _update_keymap(self):
