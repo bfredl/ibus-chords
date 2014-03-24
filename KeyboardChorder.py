@@ -29,6 +29,14 @@ class KeyboardChorder(object):
             'ut': 'f'
         }
 
+        self.modmap = {
+            'HOLD': SHIFT,
+            'space': GROUP3,
+            'Escape': GROUP3 | SHIFT,
+        }
+        self.ignore = { 'BackSpace', 'Control_L', 'Shift_L', 'ISO_Level3_Shift', 'Alt_L'}
+        self.ch_code = 'ö'
+
         self.remap = {}
         for desc, val in chords.items():
             chord = []
@@ -36,8 +44,12 @@ class KeyboardChorder(object):
                 kc, state = kb.lookup_char(ch)[0]
                 chord.append(kc)
             if isinstance(val, basestring):
-                seq = [ bk.lookup_char(ch) for ch in val]
+                seq = [ self.kb.lookup_char(ch)[0] for ch in val]
+            else:
+                seq = val
             self.remap[tuple(chord)] = seq 
+
+
 
     def run(self):
         try:
