@@ -12,6 +12,8 @@ GRABBED = 1
 PASS_THRU = 2
 
 typemap = { KeyPressEvent:2, KeyReleaseEvent:3}
+def InternAtom(core,string, only_if_exists=False):
+    return core.InternAtom(only_if_exists, len(string), string).reply().atom
 
 # Still leaks X abstraction (like any of your favourite X11 toolkit)
 # bcuz one does not simply "abstract away" x keyboard semantics
@@ -21,8 +23,7 @@ class KeyboardGrabber(object):
         self.conn = xcb.connect()
         self.X = self.conn.core
         #self.XI = self.conn(xcb.xinput.key)
-        self.root = self.conn.get_setup().roots[0]
-        self.target = self.X.GetInputFocus().reply().focus
+        self.root = self.conn.get_setup().roots[0].root
 
         self.grabExclude = [XK.XK_Super_L]
 
@@ -31,10 +32,22 @@ class KeyboardGrabber(object):
 
         self.reciever = reciever 
 
-    def run(self):
-        self.grab_window = self.get_target()
-        #grab_window.change_attributes(event_mask = X.KeyPressMask|X.KeyReleaseMask)
+        self.X.ChangeWindowAttributesChecked(self.root,X.CWEventMask,[X.PropertyChangeMask]).check()
+        self._NET_ACTIVE_WINDOW = InternAtom(self.X, "_NET_ACTIVE_WINDOW")
+        self.WINDOW = InternAtom(self.X, "WINDOW")
+
+    def _grabkey(self):
+        self.grab_window = self.target
         self.X.GrabKeyChecked(True, self.grab_window,0,0,xproto.GrabMode.Sync, xproto.GrabMode.Sync).check()
+
+    def _ungrabkey(self):
+        if self.grab_window is not None:
+            self.X.UngrabKeyChecked(0,self.grab_window,0).check()
+            self.grab_window = None
+
+    def run(self):
+        self.grab_window = None
+        self._handle_focus()
 
         self.state = 0
         self.pressed = 0
@@ -49,13 +62,16 @@ class KeyboardGrabber(object):
             if self.kbdgrab:
                 self.X.UngrabKeyboardChecked(X.CurrentTime).check()
                 self.kbdgrab = False
-            if self.grab_window is not None:
-                self.X.UngrabKeyChecked(0,self.grab_window,0).check()
-                self.grab_window = None
+            self._ungrabkey()
             #self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
 
     def _handle_event(self,ev):
-        self._ev = ev
+        if type(ev) == xproto.PropertyNotifyEvent:
+            if ev.atom == self._NET_ACTIVE_WINDOW:
+                self._handle_focus()
+            return
+
+        assert self.grab_window != None
         if self.state == IDLE:
             self._new_sequence(ev)
 
@@ -64,15 +80,21 @@ class KeyboardGrabber(object):
         else:
             self._passthru_event(ev)
 
+    def _handle_focus(self):
+        self.target = self.X.GetInputFocus().reply().focus
+        # if window.WM_CLASS in ('Gvim', 'urxvt')
+        if self.grab_window != self.target:
+            self._ungrabkey()
+            self._grabkey()
+
     def _new_sequence(self,ev):
         assert isinstance(ev, KeyPressEvent)
-        grab_window = self.get_target()
 
         #Trust me, this is neccessary 
         key = self.keycode_to_keysym(ev.detail,0)
         if key not in self.grabExclude:
             self.kbdgrab = True
-            self.X.GrabKeyboard(True, grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).reply()
+            self.X.GrabKeyboard(True, self.grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).reply()
         #self.on_sequence_new(ev.detail,ev.state,ev.time)
         
         if self.reciever.on_new_sequence(ev.detail,ev.state):
@@ -136,7 +158,7 @@ class KeyboardGrabber(object):
             typeof = typeof,
             seq = 0,
             time = ev.time,
-            root = self.root.root,
+            root = self.root,
             window = self.grab_window,
             same_screen = 0, child = X.NONE,
             root_x = 0, root_y = 0, event_x = 0, event_y = 0,
@@ -150,13 +172,13 @@ class KeyboardGrabber(object):
     def fake_event(self,typeof,keycode,shift_state=0,window=None):
         #whatif window == root, possible?
         if window is None:
-            window = self.get_target()
+            window = self.target
         typeof = typemap.get(typeof,typeof)
         ev = xKeyEvent(
             typeof = typeof,
             seq = 0,
             time = int(time.time()),
-            root = self.root.root,
+            root = self.root,
             window = window,
             same_screen = 0, child = X.NONE,
             root_x = 0, root_y = 0, event_x = 0, event_y = 0,
@@ -188,11 +210,9 @@ class KeyboardGrabber(object):
         #keysym = XK.string_to_keysym(char)
         #keycode = self.display.keysym_to_keycode(keysym)
         keycode = 10 #FIXME
-        self.fake_event(KeyPressEvent, keycode,window=self.get_target())
-        self.fake_event(KeyReleaseEvent, keycode,window=self.get_target())
+        self.fake_event(KeyPressEvent, keycode,window=self.target)
+        self.fake_event(KeyReleaseEvent, keycode,window=self.target)
 
-    def get_target(self):
-        return self.target
 
 class Test:
     def run(self):
