@@ -42,7 +42,10 @@ class KeyboardGrabber(object):
 
     def _ungrabkey(self):
         if self.grab_window is not None:
-            self.X.UngrabKeyChecked(0,self.grab_window,0).check()
+            try:
+                self.X.UngrabKeyChecked(0,self.grab_window,0).check()
+            except xproto.WindowError:
+                pass
             self.grab_window = None
 
     def run(self):
@@ -204,6 +207,18 @@ class KeyboardGrabber(object):
         ind = (keycode - mn) * stride + state
         return self.keymap.keysyms[ind]
 
+    def lookup_keysym(self,keysym):
+        stride = self.keymap.keysyms_per_keycode
+        mn = self.min_keycode
+        keymap = self.keymap.keysyms
+        indicies = [i for i, x in enumerate(my_list) if x == keysym]
+        pairs = [ ( (i/stride)+mn, i%stride) for i in indicies]
+        pairs.sort(key=lambda x: x[1])
+        return pairs
+
+    def lookup_char(self,ch):
+        return self.lookup_keysym(char_to_keysym(ch))
+
     #FIXME: we might want to send chars not mapped on keyboard
     def send_key(self,char):
         pass
@@ -212,6 +227,12 @@ class KeyboardGrabber(object):
         keycode = 10 #FIXME
         self.fake_event(KeyPressEvent, keycode,window=self.target)
         self.fake_event(KeyReleaseEvent, keycode,window=self.target)
+
+def char_to_keysym(ch):
+    ucs = ord(ch)
+    if 0x20 <= ucs < 0x80 or 0xa0 <= ucs < 0x0100:
+        return ucs
+    
 
 
 class Test:

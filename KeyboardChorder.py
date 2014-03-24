@@ -2,9 +2,6 @@ from xkeyboard import KeyboardGrabber
 from Xlib import XK
 from operator import or_
 
-IDLE = 0
-READY = 0
-
 SHIFT = 0x01
 GROUP3 = 0x80
 
@@ -26,14 +23,28 @@ class KeyboardChorder(object):
         self.ignore = { 50, 94, 22 }
         self.ch_code = (53,0x80)
 
+    def configure():
+        chords = {
+            'eh': 'F',
+            'ut': 'f'
+        }
+
+        self.remap = {}
+        for desc, val in chords.items():
+            chord = []
+            for ch in desc:
+                kc, state = kb.lookup_char(ch)[0]
+                chord.append(kc)
+            if isinstance(val, basestring):
+                seq = [ bk.lookup_char(ch) for ch in val]
+            self.remap[tuple(chord)] = seq 
+
     def run(self):
-        self.state = IDLE
         try:
             self.kb.run()
         except KeyboardInterrupt:
             pass
             
-       
     def on_new_sequence(self, keycode, state):
         if keycode in self.ignore:
             return False 
