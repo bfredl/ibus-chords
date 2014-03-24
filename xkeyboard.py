@@ -11,8 +11,10 @@ IDLE = 0
 GRABBED = 1
 PASS_THRU = 2
 
+typemap = { KeyPressEvent:2, KeyReleaseEvent:3}
+
 # Still leaks X abstraction (like any of your favourite X11 toolkit)
-# bcuz "one does not simply" abstract away x keyboard semantics
+# bcuz one does not simply "abstract away" x keyboard semantics
 # But wayland is xkb based anyways...
 class KeyboardGrabber(object):
     def __init__(self,reciever):
@@ -42,7 +44,6 @@ class KeyboardGrabber(object):
                 self._handle_event(ev)
                 self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
         finally:
-            print "HOJJ"
             if self.kbdgrab:
                 self.X.UngrabKeyboardChecked(X.CurrentTime).check()
                 self.kbdgrab = False
@@ -116,22 +117,39 @@ class KeyboardGrabber(object):
             assert self.pressed >=0
             if self.pressed == 0:
                 self.state = IDLE
+                if self.pressed == 0:
+                    if self.kbdgrab:
+                        self.X.UngrabKeyboard(X.CurrentTime)
             if ev2 is not None:
                 self._handle_event(ev2)
 
     def send_event(self,ev,window=None):
         if window is None:
-            window = self.get_target()
+            window = self.grab_window
         self.X.SendEvent(True,window,0,ev)
 
+    def _fwd_event(self,ev):
+        typeof = typemap[type(ev)] 
+        ev = xKeyEvent(
+            typeof = typeof,
+            seq = 0,
+            time = ev.time,
+            root = self.root.root,
+            window = self.grab_window,
+            same_screen = 0, child = X.NONE,
+            root_x = 0, root_y = 0, event_x = 0, event_y = 0,
+            state = ev.state,
+            detail = ev.detail
+            )
+        self.send_event(ev)
+
+
+ 
     def fake_event(self,typeof,keycode,shift_state=0,window=None):
         #whatif window == root, possible?
         if window is None:
             window = self.get_target()
-        if typeof == KeyPressEvent:
-            typeof = 2
-        elif typeof == KeyReleaseEvent:
-            typeof = 3
+        typeof = typemap.get(typeof,typeof)
         ev = xKeyEvent(
             typeof = typeof,
             seq = 0,
