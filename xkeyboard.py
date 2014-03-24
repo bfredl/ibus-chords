@@ -36,9 +36,11 @@ class KeyboardGrabber(object):
         #grab_window.change_attributes(event_mask = X.KeyPressMask|X.KeyReleaseMask)
         self.X.GrabKeyChecked(True, self.grab_window,0,0,xproto.GrabMode.Sync, xproto.GrabMode.Sync).check()
 
+        self.state = 0
+        self.pressed = 0
+        self.kbdgrab = False
+
         try:
-            self.state = 0
-            self.pressed = 0
             while 1:
                 ev = self.conn.wait_for_event()
                 self._handle_event(ev)
@@ -110,7 +112,7 @@ class KeyboardGrabber(object):
             ev2 = self.conn.poll_for_event()
             if ev2 != None:
                 # we need to handle this to not underflow self.pressed
-                if ev2.type == X.KeyPress and ev2.time == ev.time and ev2.detail == ev.detail:
+                if isinstance(ev2, KeyPressEvent) and ev2.time == ev.time and ev2.detail == ev.detail:
                     self._fwd_event(ev2)
                     return
             self.pressed -= 1

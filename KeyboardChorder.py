@@ -1,9 +1,12 @@
 from xkeyboard import KeyboardGrabber
 from Xlib import XK
+from operator import or_
 
 IDLE = 0
 READY = 0
 
+SHIFT = 0x01
+GROUP3 = 0x80
 
 class KeyboardChorder(object):
     def __init__(self):
@@ -15,6 +18,12 @@ class KeyboardChorder(object):
             (41,45): (29,0),
             (40,44): (29,1)
         }
+        self.modmap = {
+            'HOLD': SHIFT,
+            65: GROUP3,
+            66: GROUP3 | SHIFT,
+        }
+        self.ignore = { 50, 94, 22 }
         self.ch_code = (53,0x80)
 
     def run(self):
@@ -26,9 +35,8 @@ class KeyboardChorder(object):
             
        
     def on_new_sequence(self, keycode, state):
-        keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
-        if keysym == XK.XK_Shift_L:
-            pass#return False #FIXME
+        if keycode in self.ignore:
+            return False 
         self.seq = []
         self.times = []
         self.dead = set()
@@ -48,6 +56,7 @@ class KeyboardChorder(object):
             else:
                 self.emit_key(keycode,state)
         self.seq.remove(keycode)
+        self.last_time = time
 
     def on_repeat(self, *a):
         pass # (:
@@ -77,10 +86,18 @@ class KeyboardChorder(object):
             self.kb.fake_stroke(*val)
             return True
 
+        modmap = self.modmap
+        modders = set(chord) &  modmap.viewkeys()
+        if modders and len(chord) == len(modders) + 1:
+            state = reduce(or_, (modmap[k] for k in modders))
+            keycode = (set(chord) - modders).pop()
+            self.kb.fake_stroke(keycode,state)
+            return True
+
 
         if len(chord) == 1:
             keycode, = chord
-            self.kb.fake_stroke(keycode,1)
+            self.kb.fake_stroke(keycode,modmap['HOLD'])
             return True
         else:
             return False
@@ -91,5 +108,4 @@ class KeyboardChorder(object):
 
 if __name__ == "__main__":
     import time
-    time.sleep(3)
     KeyboardChorder().run()
