@@ -22,16 +22,17 @@ class KeyboardGrabber(object):
         self.root = self.conn.get_setup().roots[0]
         self.target = self.X.GetInputFocus().reply().focus
 
+        self.grabExclude = [XK.XK_Super_L]
+
         #self.grab_mask = [XK.XK_Control_L, XK.XK_Control_R, XK.XK_Alt_L] 
         self._update_keymap()
 
-        # don't make reciever false plz
         self.reciever = reciever 
 
     def run(self):
-        grab_window = self.get_target()
+        self.grab_window = self.get_target()
         #grab_window.change_attributes(event_mask = X.KeyPressMask|X.KeyReleaseMask)
-        self.X.GrabKeyChecked(True, grab_window,0,0,xproto.GrabMode.Sync, xproto.GrabMode.Sync).check()
+        self.X.GrabKeyChecked(True, self.grab_window,0,0,xproto.GrabMode.Sync, xproto.GrabMode.Sync).check()
 
         try:
             self.state = 0
@@ -41,11 +42,17 @@ class KeyboardGrabber(object):
                 self._handle_event(ev)
                 self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
         finally:
-            if self.state != 0:
-                self.X.UngrabKeyboard(X.CurrentTime)
-            self.X.UngrabKey(0,self.get_target(),0)
+            print "HOJJ"
+            if self.kbdgrab:
+                self.X.UngrabKeyboardChecked(X.CurrentTime).check()
+                self.kbdgrab = False
+            if self.grab_window is not None:
+                self.X.UngrabKeyChecked(0,self.grab_window,0).check()
+                self.grab_window = None
+            #self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
 
     def _handle_event(self,ev):
+        self._ev = ev
         if self.state == IDLE:
             self._new_sequence(ev)
 
@@ -59,9 +66,10 @@ class KeyboardGrabber(object):
         grab_window = self.get_target()
 
         #Trust me, this is neccessary 
-        self.X.GrabKeyboard(True, grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).reply()
-        self.state = GRABBED
         key = self.keycode_to_keysym(ev.detail,0)
+        if key not in self.grabExclude:
+            self.kbdgrab = True
+            self.X.GrabKeyboard(True, grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).reply()
         #self.on_sequence_new(ev.detail,ev.state,ev.time)
         
         if self.reciever.on_new_sequence(ev.detail,ev.state):
@@ -82,7 +90,8 @@ class KeyboardGrabber(object):
 
             self.pressed -= 1
             if self.pressed == 0:
-                self.X.UngrabKeyboard(X.CurrentTime)
+                if self.kbdgrab:
+                    self.X.UngrabKeyboard(X.CurrentTime)
                 self.state = IDLE
             # on_release might set state
             self.reciever.on_release(ev.detail,ev.state,ev.time,self.pressed)
@@ -93,7 +102,7 @@ class KeyboardGrabber(object):
 
     # all th
     def _passthru_event(self,ev):
-        self.send_event(ev)
+        self._fwd_event(ev)
         if  isinstance(ev, KeyPressEvent):
             self.pressed += 1
         elif isinstance(ev, KeyReleaseEvent):
@@ -101,7 +110,7 @@ class KeyboardGrabber(object):
             if ev2 != None:
                 # we need to handle this to not underflow self.pressed
                 if ev2.type == X.KeyPress and ev2.time == ev.time and ev2.detail == ev.detail:
-                    self.send_event(ev2)
+                    self._fwd_event(ev2)
                     return
             self.pressed -= 1
             assert self.pressed >=0
@@ -172,18 +181,18 @@ class Test:
     # these are for testing
     def on_new_sequence(self,keycode,state):
         print "NEU", keycode, state 
-        return True#not (state & 4)
+        return keycode != 108
 
-    def on_press(self,keycode,state,keysym,time,pressed):
+    def on_press(self,keycode,state,time,pressed):
         print "PRESS", keycode, state, pressed
 
-    def on_release(self,keycode,state,keysym,time,pressed):
+    def on_release(self,keycode,state,time,pressed):
         print "RELEASE", keycode, state, pressed
         if keycode == 10:
             self.kb.send_key('1')
         sym0 = self.kb.keycode_to_keysym(keycode,0)
         if sym0 == XK.XK_Escape:
-            sys.exit(0)
+            raise KeyboardInterrupt
 
     def on_repeat(self,keycode,state,time):
         #print "REPEAT", ev
@@ -195,4 +204,5 @@ def xKeyEvent(typeof,detail,seq,time, root, window, child, root_x, root_y, event
     return struct.pack('BBhIIIIhhhhHBx', typeof,detail,seq,time, root, window, child, root_x, root_y, event_x, event_y, state, same_screen)
 
 if __name__ == "__main__":
-    Test().run()
+    t =Test()
+    t.run()
