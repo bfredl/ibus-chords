@@ -60,7 +60,6 @@ class KeyboardGrabber(object):
             while 1:
                 ev = self.conn.wait_for_event()
                 self._handle_event(ev)
-                self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
         finally:
             if self.kbdgrab:
                 self.X.UngrabKeyboardChecked(X.CurrentTime).check()
@@ -69,19 +68,26 @@ class KeyboardGrabber(object):
             #self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
 
     def _handle_event(self,ev):
-        if type(ev) == xproto.PropertyNotifyEvent:
+        if isinstance(ev,xproto.PropertyNotifyEvent):
             if ev.atom == self._NET_ACTIVE_WINDOW:
                 self._handle_focus()
             return
 
-        assert self.grab_window != None
-        if self.state == IDLE:
-            self._new_sequence(ev)
+        elif isinstance(ev,(KeyPressEvent, KeyReleaseEvent)):
+            assert self.grab_window != None
+            if self.state == IDLE:
+                self._new_sequence(ev)
 
-        if self.state == GRABBED:
-            self._sequence_event(ev)
+            if self.state == GRABBED:
+                self._sequence_event(ev)
+            else:
+                self._passthru_event(ev)
+            self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
+        elif isinstance(ev,xproto.MappingNotifyEvent):
+            self._update_keymap()
+            self.reciever.on_keymap_change()
         else:
-            self._passthru_event(ev)
+            print ev
 
     def _handle_focus(self):
         self.target = self.X.GetInputFocus().reply().focus
@@ -221,7 +227,6 @@ class KeyboardGrabber(object):
         return pairs
 
     def lookup_char(self,ch):
-        print ch, 
         return self.lookup_keysym(char_to_keysym(ch))
 
     #FIXME: we might want to send chars not mapped on keyboard
@@ -238,7 +243,7 @@ def char_to_keysym(ch):
     if 0x20 <= ucs < 0x80 or 0xa0 <= ucs < 0x0100:
         return ucs
 
-# This is NOT the way it should be done... 
+# In the general case, this is of course ALL WRONG
 def level_to_state(lvl):
     return (lvl&1) + bool(lvl& 4)*0x80
 

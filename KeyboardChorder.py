@@ -18,7 +18,11 @@ class KeyboardChorder(object):
         chords = {
             'eh': 'F',
             'ut': 'f',
-            'as': ' = '
+            'as': ' = ',
+            'is': ' == ',
+            '\'c': '\': \'',
+            'oe': ' += ',
+            'ht': '()'
         }
 
         modmap = {
@@ -45,7 +49,7 @@ class KeyboardChorder(object):
                 seq = [ self.kb.lookup_char(ch)[0] for ch in val]
             else:
                 seq = val
-            self.remap[tuple(chord)] = seq 
+            self.remap[tuple(sorted(chord))] = seq 
 
         self.modmap = { code_s(s) or s: mod for s, mod in modmap.iteritems()}
         self.ignore = { code_s(s) for s in ignore}
@@ -85,6 +89,9 @@ class KeyboardChorder(object):
 
     def on_repeat(self, *a):
         pass # (:
+
+    def on_keymap_change(self):
+        self.configure()
 
     def emit_key(self,keycode,state):
         self.kb.fake_stroke(keycode,state)
