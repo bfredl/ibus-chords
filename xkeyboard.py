@@ -79,10 +79,7 @@ class KeyboardGrabber(object):
             if self.state == IDLE:
                 self._new_sequence(ev)
 
-            if self.state == GRABBED:
-                self._sequence_event(ev)
-            else:
-                self._passthru_event(ev)
+            self._sequence_event(ev)
             self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
         elif isinstance(ev,xproto.MappingNotifyEvent):
             self._update_keymap()
@@ -129,46 +126,26 @@ class KeyboardGrabber(object):
             ev = self.conn.poll_for_event()
         return ev
 
-
-
     def _sequence_event(self,ev):
+        grab = ( self.state == GRABBED )
+        if not grab: self._fwd_event(ev)
         if  isinstance(ev, KeyPressEvent):
             self.pressed += 1
-            self.reciever.on_press(ev.detail,ev.state,ev.time,self.pressed)
-        elif isinstance(ev, KeyReleaseEvent):
+            if grab: self.reciever.on_press(ev.detail,ev.state,ev.time,self.pressed)
+        else:
             ev2 = self._slow_poll()
             if ev2 != None:
                 if isinstance(ev2, KeyPressEvent) and ev2.time == ev.time and ev2.detail == ev.detail:
-                    self.reciever.on_repeat(ev.detail,ev.state,ev.time)
+                    if grab:
+                        self.reciever.on_repeat(ev.detail,ev.state,ev.time)
+                    else:
+                        self._fwd_event(ev2)
                     return
-                elif isinstance(ev2, KeyPressEvent) and ev2.detail == ev.detail:
-                    print ev2.time - ev.time
 
             self.pressed -= 1
             self._check_end_seq()
             # on_release might set state
-            self.reciever.on_release(ev.detail,ev.state,ev.time,self.pressed)
-            if ev2 is not None:
-                self._handle_event(ev2)
-        else:
-            print ev, type(ev)
-
-
-
-    # all th
-    def _passthru_event(self,ev):
-        self._fwd_event(ev)
-        if  isinstance(ev, KeyPressEvent):
-            self.pressed += 1
-        elif isinstance(ev, KeyReleaseEvent):
-            ev2 = self._slow_poll()
-            if ev2 != None:
-                # we need to handle this to not underflow self.pressed
-                if isinstance(ev2, KeyPressEvent) and ev2.time == ev.time and ev2.detail == ev.detail:
-                    self._fwd_event(ev2)
-                    return
-            self.pressed -= 1
-            self._check_end_seq()
+            if grab: self.reciever.on_release(ev.detail,ev.state,ev.time,self.pressed)
             if ev2 is not None:
                 self._handle_event(ev2)
 

@@ -35,6 +35,9 @@ class KeyboardChorder(object):
             'jc': '8',
             'kc': '9',
             'a0': self.kb.pause,
+            'or': u'ö', 'ocr': u'Ö',
+            'er': u'ä', 'ecr': u'Ä',
+            'ar': u'å', 'acr': u'Å',
         }
 
         modmap = {
