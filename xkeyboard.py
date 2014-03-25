@@ -204,15 +204,21 @@ class KeyboardGrabber(object):
     def keycode_to_keysym(self,keycode,state):
         stride = self.keymap.keysyms_per_keycode
         mn = self.min_keycode
-        ind = (keycode - mn) * stride + state
+        ind = (keycode - mn) * stride + state_to_level(state)
         return self.keymap.keysyms[ind]
 
     def lookup_keysym(self,keysym):
+        if isinstance(keysym,basestring):
+            keysym,ks = XK.string_to_keysym(keysym), keysym
+            if keysym == 0:
+                raise KeyError(ks)
+            print ks
         stride = self.keymap.keysyms_per_keycode
         mn = self.min_keycode
         keymap = self.keymap.keysyms
-        indicies = [i for i, x in enumerate(my_list) if x == keysym]
-        pairs = [ ( (i/stride)+mn, i%stride) for i in indicies]
+        indicies = [i for i, x in enumerate(keymap) if x == keysym]
+        pairs = [ ( (i/stride)+mn, level_to_state(i%stride)) for i in indicies]
+        print pairs
         pairs.sort(key=lambda x: x[1])
         return pairs
 
@@ -232,8 +238,13 @@ def char_to_keysym(ch):
     ucs = ord(ch)
     if 0x20 <= ucs < 0x80 or 0xa0 <= ucs < 0x0100:
         return ucs
-    
 
+# This is NOT the way it should be done... 
+def level_to_state(lvl):
+    return lvl&1 + bool(lvl& 4)*0x80
+
+def state_to_level(state):
+    return state&1 + bool(state& 0x80)*4
 
 class Test:
     def run(self):
