@@ -212,17 +212,16 @@ class KeyboardGrabber(object):
             keysym,ks = XK.string_to_keysym(keysym), keysym
             if keysym == 0:
                 raise KeyError(ks)
-            print ks
         stride = self.keymap.keysyms_per_keycode
         mn = self.min_keycode
         keymap = self.keymap.keysyms
         indicies = [i for i, x in enumerate(keymap) if x == keysym]
         pairs = [ ( (i/stride)+mn, level_to_state(i%stride)) for i in indicies]
-        print pairs
         pairs.sort(key=lambda x: x[1])
         return pairs
 
     def lookup_char(self,ch):
+        print ch, 
         return self.lookup_keysym(char_to_keysym(ch))
 
     #FIXME: we might want to send chars not mapped on keyboard
@@ -241,7 +240,7 @@ def char_to_keysym(ch):
 
 # This is NOT the way it should be done... 
 def level_to_state(lvl):
-    return lvl&1 + bool(lvl& 4)*0x80
+    return (lvl&1) + bool(lvl& 4)*0x80
 
 def state_to_level(state):
     return state&1 + bool(state& 0x80)*4

@@ -17,7 +17,8 @@ class KeyboardChorder(object):
     def configure(self):
         chords = {
             'eh': 'F',
-            'ut': 'f'
+            'ut': 'f',
+            'as': ' = '
         }
 
         modmap = {
@@ -47,8 +48,8 @@ class KeyboardChorder(object):
             self.remap[tuple(chord)] = seq 
 
         self.modmap = { code_s(s) or s: mod for s, mod in modmap.iteritems()}
-        print self.modmap
-        self.ignore = { self.kb.lookup_keysym(s)[0] for s in ignore}
+        self.ignore = { code_s(s) for s in ignore}
+        self.ignore.add(108)
         self.ch_code  = pair(ch_code)
 
     def run(self):
@@ -74,13 +75,10 @@ class KeyboardChorder(object):
         if keycode in self.dead:
             self.dead.remove(keycode)
         else:
-            if self.is_chord(time,keycode): 
-                dead = self.emit_chord(keycode)
-                if dead:
-                    self.dead.update([k for k in dead if k != keycode])
-                else:
-                    self.emit_key(keycode,state)
-            else:
+            dead = self.emit_chord(time,keycode)
+            if dead:
+                self.dead.update([k for k in dead if k != keycode])
+            else: 
                 self.emit_key(keycode,state)
         self.seq.remove(keycode)
         self.last_time = time
@@ -88,27 +86,25 @@ class KeyboardChorder(object):
     def on_repeat(self, *a):
         pass # (:
 
-    def is_chord(self,time,keycode=None):
-        n = len(self.seq)
-        if len(self.dead) > 0:
-            return True # not _completely_ correct, but
-        if n == 1:
-            return time - self.last_time >= self.modThreshold
-        if n == 2:
-            if keycode == self.seq[1]: # ab|ba is always chord
-                return True
-            t0, t1 = self.times[-2:]
-            t2 = time
-            return t2-t1 > (self.chordTreshold)*(t1-t0) 
-        if n >= 3:
-            return True
-
     def emit_key(self,keycode,state):
         self.kb.fake_stroke(keycode,state)
         #print "EMIT", keycode, state
 
-    #FIXME: merge w in_chord
-    def emit_chord(self,keycode):
+    #FIXME: return actions instead for OSD preview
+    def emit_chord(self,time,keycode):
+        n = len(self.seq)
+        hold = time - self.last_time >= self.modThreshold
+        if len(self.dead) == 0:
+            if n == 1 and not hold:
+                return False
+                    
+            # risk of conflict with slightly overlapping sequence
+            if n == 2 and keycode == self.seq[0]: # ab|ba is always chord
+                t0, t1 = self.times[-2:]
+                t2 = time
+                if t2-t1 < (self.chordTreshold)*(t1-t0):
+                    return False
+
         chord = tuple(sorted(self.seq))
         #keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
         if chord in self.remap:
@@ -119,13 +115,16 @@ class KeyboardChorder(object):
 
         modmap = self.modmap
         modders = set(chord) &  modmap.viewkeys()
-        if modders and len(chord) >= len(modders) + 1:
-            state = reduce(or_, (modmap[k] for k in modders))
-            if keycode in (set(chord) - modders):
-                self.kb.fake_stroke(keycode,state)
-                return modders
-            else:
-                return False
+        state = reduce(or_, (modmap[k] for k in modders),0)
+        other = set(chord) - modders
+        if modders and other:
+            if len(other) == 1:
+                keycode = other.pop() 
+            elif keycode not in other:
+                return chord# ambigous: do nothing
+
+            self.kb.fake_stroke(keycode,state)
+            return modders | {keycode}
 
 
         if len(chord) == 1:
