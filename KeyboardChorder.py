@@ -34,6 +34,7 @@ class KeyboardChorder(object):
             'qc': '7',
             'jc': '8',
             'kc': '9',
+            'a0': self.kb.pause,
         }
 
         modmap = {
@@ -128,8 +129,11 @@ class KeyboardChorder(object):
         #keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
         if chord in self.remap:
             seq = self.remap[chord]
-            for key in seq:
-                self.kb.fake_stroke(*key)
+            if callable(seq):
+                seq()
+            else:
+                for key in seq:
+                    self.kb.fake_stroke(*key)
             return chord
 
         modmap = self.modmap

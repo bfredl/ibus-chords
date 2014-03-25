@@ -55,6 +55,7 @@ class KeyboardGrabber(object):
         self.state = 0
         self.pressed = 0
         self.kbdgrab = False
+        self.should_pause = False
 
         try:
             while 1:
@@ -111,22 +112,40 @@ class KeyboardGrabber(object):
         else:
             self.state = PASS_THRU
 
+    def _check_end_seq(self):
+        assert self.pressed >=0
+        if self.pressed == 0:
+            self.state = IDLE
+            if self.kbdgrab:
+                self.X.UngrabKeyboard(X.CurrentTime)
+            if self.should_pause:
+                self._ungrabkey()
+                self.should_pause = False
+
+    def _slow_poll(self):
+        ev = self.conn.poll_for_event()
+        if ev is None:
+            time.sleep(1e-3)
+            ev = self.conn.poll_for_event()
+        return ev
+
+
+
     def _sequence_event(self,ev):
         if  isinstance(ev, KeyPressEvent):
             self.pressed += 1
             self.reciever.on_press(ev.detail,ev.state,ev.time,self.pressed)
         elif isinstance(ev, KeyReleaseEvent):
-            ev2 = self.conn.poll_for_event()
+            ev2 = self._slow_poll()
             if ev2 != None:
                 if isinstance(ev2, KeyPressEvent) and ev2.time == ev.time and ev2.detail == ev.detail:
                     self.reciever.on_repeat(ev.detail,ev.state,ev.time)
                     return
+                elif isinstance(ev2, KeyPressEvent) and ev2.detail == ev.detail:
+                    print ev2.time - ev.time
 
             self.pressed -= 1
-            if self.pressed == 0:
-                if self.kbdgrab:
-                    self.X.UngrabKeyboard(X.CurrentTime)
-                self.state = IDLE
+            self._check_end_seq()
             # on_release might set state
             self.reciever.on_release(ev.detail,ev.state,ev.time,self.pressed)
             if ev2 is not None:
@@ -134,25 +153,22 @@ class KeyboardGrabber(object):
         else:
             print ev, type(ev)
 
+
+
     # all th
     def _passthru_event(self,ev):
         self._fwd_event(ev)
         if  isinstance(ev, KeyPressEvent):
             self.pressed += 1
         elif isinstance(ev, KeyReleaseEvent):
-            ev2 = self.conn.poll_for_event()
+            ev2 = self._slow_poll()
             if ev2 != None:
                 # we need to handle this to not underflow self.pressed
                 if isinstance(ev2, KeyPressEvent) and ev2.time == ev.time and ev2.detail == ev.detail:
                     self._fwd_event(ev2)
                     return
             self.pressed -= 1
-            assert self.pressed >=0
-            if self.pressed == 0:
-                self.state = IDLE
-                if self.pressed == 0:
-                    if self.kbdgrab:
-                        self.X.UngrabKeyboard(X.CurrentTime)
+            self._check_end_seq()
             if ev2 is not None:
                 self._handle_event(ev2)
 
@@ -176,7 +192,12 @@ class KeyboardGrabber(object):
             )
         self.send_event(ev)
 
-
+    def pause(self):
+        if self.state == IDLE:
+            self._ungrabkey()
+        else:
+            self.should_pause = True
+        
  
     def fake_event(self,typeof,keycode,shift_state=0,window=None):
         #whatif window == root, possible?
