@@ -4,6 +4,7 @@ from Xlib import XK
 from operator import or_
 
 SHIFT = 0x01
+CTRL = 0x04
 LEVEL3 = 0x80
 
 class KeyboardChorder(object):
@@ -22,13 +23,24 @@ class KeyboardChorder(object):
             'is': ' == ',
             '\'c': '\': \'',
             'oe': ' += ',
-            'ht': '()'
+            'ht': '()',
+            'ac': '0',
+            'oc': '1',
+            'ec': '2',
+            'uc': '3',
+            ',c': '4',
+            '.c': '5',
+            'pc': '6',
+            'qc': '7',
+            'jc': '8',
+            'kc': '9',
         }
 
         modmap = {
             'HOLD': SHIFT,
             'space': LEVEL3,
             'Escape': LEVEL3 | SHIFT,
+            'minus': CTRL
         }
         ignore = { 'BackSpace', 'Control_L', 'Shift_L', 0xFE03, 'Alt_L'}
         ch_code = u'ö'
