@@ -16,6 +16,7 @@ class KeyboardChorder(object):
         self.configure()
 
     def configure(self):
+        #TODO this belongs in 'config' repo where the keymap is
         chords = {
             'eh': 'F',
             'ut': 'f',
@@ -39,7 +40,7 @@ class KeyboardChorder(object):
             'er': u'ä', 'ecr': u'Ä',
             'ar': u'å', 'acr': u'Å',
             'el': '} else {',
-            ' -': ';',
+            ' :': ';',
             'uh': '{',
             'et': '}',
             'jh': '{{{',
@@ -50,7 +51,7 @@ class KeyboardChorder(object):
             'HOLD': SHIFT,
             'space': LEVEL3,
             'Escape': LEVEL3 | SHIFT,
-            'minus': CTRL
+            'colon': CTRL
         }
         ignore = { 'BackSpace', 'Control_L', 'Shift_L', 0xFE03, 'Alt_L'}
         ch_code = u'ö'
