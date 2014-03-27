@@ -44,7 +44,7 @@ class KeyboardGrabber(object):
         if self.grab_window is not None:
             try:
                 self.X.UngrabKeyChecked(0,self.grab_window,0).check()
-            except xproto.WindowError:
+            except xproto.BadWindow:
                 pass
             self.grab_window = None
 
