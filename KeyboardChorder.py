@@ -38,6 +38,10 @@ class KeyboardChorder(object):
             'or': u'ö', 'ocr': u'Ö',
             'er': u'ä', 'ecr': u'Ä',
             'ar': u'å', 'acr': u'Å',
+            'el': '} else {',
+            ' -': ';',
+            'uh': '{',
+            'et': '}',
         }
 
         modmap = {
