@@ -42,6 +42,8 @@ class KeyboardChorder(object):
             ' -': ';',
             'uh': '{',
             'et': '}',
+            'jh': '{{{',
+            'kh': '}}}',
         }
 
         modmap = {

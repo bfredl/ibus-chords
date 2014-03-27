@@ -22,13 +22,10 @@ class KeyboardGrabber(object):
     def __init__(self,reciever):
         self.conn = xcb.connect()
         self.X = self.conn.core
-        #self.XI = self.conn(xcb.xinput.key)
         self.root = self.conn.get_setup().roots[0].root
+        self._update_keymap()
 
         self.grabExclude = [XK.XK_Super_L]
-
-        #self.grab_mask = [XK.XK_Control_L, XK.XK_Control_R, XK.XK_Alt_L] 
-        self._update_keymap()
 
         self.reciever = reciever 
 
