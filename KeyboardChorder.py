@@ -7,10 +7,12 @@ SHIFT = 0x01
 CTRL = 0x04
 LEVEL3 = 0x80
 
+dbg = True
 class KeyboardChorder(object):
     def __init__(self):
         self.kb = KeyboardGrabber(self)
         self.modThreshold = 200
+        self.modThreshold2 = 300
         self.chordTreshold = 2.0
 
         self.configure()
@@ -79,26 +81,39 @@ class KeyboardChorder(object):
         self.ignore.add(108)
         self.ch_code  = pair(ch_code)
 
+    def psym(self,keycode,state):
+        val = self.kb.keycode_to_keysym(keycode,state)
+        if 0x20 <= val < 0x80 or 0xa0 <= val < 0x0100:
+            return chr(val)
+        else:
+            return val
+
     def run(self):
         try:
             self.kb.run()
         except KeyboardInterrupt:
             pass
             
-    def on_new_sequence(self, keycode, state):
+    def on_new_sequence(self, keycode, state, time):
         if keycode in self.ignore:
             return False 
         self.seq = []
+        self.seq_time = time 
         self.times = []
         self.dead = set()
+        self.last_nonchord = 0
         return True
 
     def on_press(self,keycode,state,time,pressed):
         self.seq.append(keycode)
         self.times.append(time)
         self.last_time = time
+        if dbg:
+            print '+', self.psym(keycode,state), time-self.seq_time
 
     def on_release(self,keycode,state,time,pressed):
+        if dbg:
+            print '-', self.psym(keycode,state), time-self.seq_time
         if keycode in self.dead:
             self.dead.remove(keycode)
         else:
@@ -106,6 +121,7 @@ class KeyboardChorder(object):
             if dead:
                 self.dead.update([k for k in dead if k != keycode])
             else: 
+                self.last_nonchord = time
                 self.emit_key(keycode,state)
         self.seq.remove(keycode)
         self.last_time = time
@@ -129,11 +145,16 @@ class KeyboardChorder(object):
                 return False
                     
             # risk of conflict with slightly overlapping sequence
-            if n == 2 and keycode == self.seq[0]: # ab|ba is always chord
-                t0, t1 = self.times[-2:]
-                t2 = time
-                if t2-t1 < (self.chordTreshold)*(t1-t0):
+            if n == 2 and not hold:
+                hold2 = time - self.times[-2] >= self.modThreshold2
+                if time - self.last_nonchord < 120:
                     return False
+                if keycode == self.seq[0] and not hold2: # ab|ba is always chord
+                    print '!hold2'
+                    t0, t1 = self.times[-2:]
+                    t2 = time
+                    if t2-t1 < (self.chordTreshold)*(t1-t0):
+                        return False
 
         chord = tuple(sorted(self.seq))
         #keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]

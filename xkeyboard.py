@@ -101,7 +101,7 @@ class KeyboardGrabber(object):
             self.X.GrabKeyboard(True, self.grab_window,X.CurrentTime,xproto.GrabMode.Sync, xproto.GrabMode.Sync).reply()
         #self.on_sequence_new(ev.detail,ev.state,ev.time)
         
-        if self.reciever.on_new_sequence(ev.detail,ev.state):
+        if self.reciever.on_new_sequence(ev.detail,ev.state,ev.time):
             self.state = GRABBED
         else:
             self.state = PASS_THRU
