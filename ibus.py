@@ -1,5 +1,5 @@
 # vim:set et sts=4 sw=4:
-#
+# encoding: utf8
 # ibus-tmpl - The Input Bus template project
 #
 # Copyright (c) 2007-2014 Peng Huang <shawn.p.huang@gmail.com>
@@ -30,29 +30,28 @@ import sys
 import getopt
 import locale
 
-import enchant
-
 keysyms = IBus
 
-class EngineEnchant(IBus.Engine):
-    __gtype_name__ = 'EngineEnchant'
-    __dict = enchant.Dict("en")
+class ChordEngine(IBus.Engine):
+    __gtype_name__ = 'ChordEngine'
 
     def __init__(self):
-        super(EngineEnchant, self).__init__()
+        super(ChordEngine, self).__init__()
         self.__is_invalidate = False
         self.__preedit_string = ""
         self.__lookup_table = IBus.LookupTable.new(10, 0, True, True)
         self.__prop_list = IBus.PropList()
         self.__prop_list.append(IBus.Property(key="test", icon="ibus-local"))
-        print("Create EngineEnchant OK")
+        print("Create ChordEngine OK")
 
     def do_process_key_event(self, keyval, keycode, state):
         print("process_key_event(%04x, %04x, %04x)" % (keyval, keycode, state))
         # ignore key release events
         is_press = ((state & IBus.ModifierType.RELEASE_MASK) == 0)
-        if not is_press:
-            return False
+        if is_press:
+            return self.on_key_press(keyval, keycode, state)
+        else:
+            return self.on_key_release(keyval, keycode, state)
 
         if self.__preedit_string:
             if keyval == keysyms.Return:
@@ -81,20 +80,6 @@ class EngineEnchant(IBus.Engine):
                 candidate = candidates[index].text
                 self.__commit_string(candidate)
                 return True
-            elif keyval == keysyms.Page_Up or keyval == keysyms.KP_Page_Up:
-                self.page_up()
-                return True
-            elif keyval == keysyms.Page_Down or keyval == keysyms.KP_Page_Down:
-                self.page_down()
-                return True
-            elif keyval == keysyms.Up:
-                self.cursor_up()
-                return True
-            elif keyval == keysyms.Down:
-                self.cursor_down()
-                return True
-            elif keyval == keysyms.Left or keyval == keysyms.Right:
-                return True
         if keyval in range(keysyms.a, keysyms.z + 1) or \
             keyval in range(keysyms.A, keysyms.Z + 1):
             if state & (IBus.ModifierType.CONTROL_MASK | IBus.ModifierType.MOD1_MASK) == 0:
@@ -107,36 +92,28 @@ class EngineEnchant(IBus.Engine):
 
         return False
 
+    def on_key_press(self, keyval, keycode, state):
+        islat =  0x20 <= keyval < 0x80 or 0xa0 <= keyval < 0x0100
+        if islat:
+            if keyval == ord('q'): sys.exit()
+            #if state & (IBus.ModifierType.CONTROL_MASK | IBus.ModifierType.MOD1_MASK) == 0:
+            self.__preedit_string += chr(keyval)
+            self.__invalidate()
+            return True
+        return False
+
+    def on_key_release(self, keyval, keycode, state):
+        islat =  0x20 <= keyval < 0x80 or 0xa0 <= keyval < 0x0100
+        if islat:
+            self.__commit_string(self.__preedit_string)
+            return True
+        return False
+
     def __invalidate(self):
         if self.__is_invalidate:
             return
         self.__is_invalidate = True
         GLib.idle_add(self.__update)
-
-
-    def do_page_up(self):
-        if self.__lookup_table.page_up():
-            self.page_up_lookup_table()
-            return True
-        return False
-
-    def do_page_down(self):
-        if self.__lookup_table.page_down():
-            self.page_down_lookup_table()
-            return True
-        return False
-
-    def do_cursor_up(self):
-        if self.__lookup_table.cursor_up():
-            self.cursor_up_lookup_table()
-            return True
-        return False
-
-    def do_cursor_down(self):
-        if self.__lookup_table.cursor_down():
-            self.cursor_down_lookup_table()
-            return True
-        return False
 
     def __commit_string(self, text):
         self.commit_text(IBus.Text.new_from_string(text))
@@ -147,7 +124,7 @@ class EngineEnchant(IBus.Engine):
         preedit_len = len(self.__preedit_string)
         attrs = IBus.AttrList()
         self.__lookup_table.clear()
-        if preedit_len > 0:
+        if False:
             if not self.__dict.check(self.__preedit_string):
                 attrs.append(IBus.Attribute.new(IBus.AttrType.FOREGROUND,
                         0xff0000, 0, preedit_len))
@@ -155,10 +132,10 @@ class EngineEnchant(IBus.Engine):
                     self.__lookup_table.append_candidate(IBus.Text.new_from_string(text))
         text = IBus.Text.new_from_string(self.__preedit_string)
         text.set_attributes(attrs)
-        self.update_auxiliary_text(text, preedit_len > 0)
+        #self.update_auxiliary_text(text, preedit_len > 0)
 
-        attrs.append(IBus.Attribute.new(IBus.AttrType.UNDERLINE,
-                IBus.AttrUnderline.SINGLE, 0, preedit_len))
+        #attrs.append(IBus.Attribute.new(IBus.AttrType.UNDERLINE,
+        #       IBus.AttrUnderline.SINGLE, 0, preedit_len))
         text = IBus.Text.new_from_string(self.__preedit_string)
         text.set_attributes(attrs)
         self.update_preedit_text(text, preedit_len, preedit_len > 0)
@@ -186,37 +163,37 @@ class EngineEnchant(IBus.Engine):
 
 class IMApp:
     def __init__(self, exec_by_ibus):
-        engine_name = "enchant python" if exec_by_ibus else "enchant python (debug)"
+        engine_name = "KeyboardChorder" if exec_by_ibus else "KeyboardChorder dbg"
         self.__component = \
-                IBus.Component.new("org.freedesktop.IBus.EnchantPython",
-                                   "Enchant Python Component",
-                                   "0.1.0",
-                                   "GPL",
-                                   "Peng Huang <shawn.p.huang@gmail.com>",
-                                   "http://example.com",
-                                   "/usr/bin/exec",
-                                   "ibus-enchant")
-        engine = IBus.EngineDesc.new("enchant-python",
+                IBus.Component.new("com.github.bfredl.KeyboardChorder",
+                                   "KeyboardChorder IBus component",
+                                   "0.0.0",
+                                   "MIT",
+                                   "Björn Linse <bjorn.linse@gmail.com> ",
+                                   "http://bfredl.github.io",
+                                   "/usr/bin/FIXME",
+                                   "ibus-FIXME")
+        engine = IBus.EngineDesc.new("KeyboardChorder",
                                      engine_name,
-                                     "English Enchant",
+                                     "Crazy keyboard chords",
                                      "en",
-                                     "GPL",
-                                     "Peng Huang <shawn.p.huang@gmail.com>",
+                                     "MIT",
+                                     "Björn Linse <bjorn.linse@gmail.com> ",
                                      "",
-                                     "us")
+                                     "se")
         self.__component.add_engine(engine)
         self.__mainloop = GLib.MainLoop()
         self.__bus = IBus.Bus()
         self.__bus.connect("disconnected", self.__bus_disconnected_cb)
         self.__factory = IBus.Factory.new(self.__bus.get_connection())
-        self.__factory.add_engine("enchant-python",
-                GObject.type_from_name("EngineEnchant"))
+        self.__factory.add_engine("KeyboardChorder",
+                GObject.type_from_name("ChordEngine"))
         if exec_by_ibus:
-            self.__bus.request_name("org.freedesktop.IBus.EnchantPython", 0)
+            self.__bus.request_name("com.github.bfredl.KeyboardChorder", 0)
         else:
             self.__bus.register_component(self.__component)
             self.__bus.set_global_engine_async(
-                    "enchant-python", -1, None, None, None)
+                    "KeyboardChorder", -1, None, None, None)
 
     def run(self):
         self.__mainloop.run()
