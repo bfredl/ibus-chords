@@ -29,93 +29,74 @@ import os
 import sys
 import getopt
 import locale
+import time
 
 keysyms = IBus
 
-class ChordEngine(IBus.Engine):
-    __gtype_name__ = 'ChordEngine'
+IDLE = 0
+GRABBED = 1
+PASS_THRU = 2
+
+class BaseEngine(IBus.Engine):
+    __gtype_name__ = 'BaseEngine'
 
     def __init__(self):
-        super(ChordEngine, self).__init__()
+        super(BaseEngine, self).__init__()
         self.__is_invalidate = False
-        self.__preedit_string = ""
+        self.initialize()
         self.__lookup_table = IBus.LookupTable.new(10, 0, True, True)
         self.__prop_list = IBus.PropList()
         self.__prop_list.append(IBus.Property(key="test", icon="ibus-local"))
-        print("Create ChordEngine OK")
+        #override this in subclass
+        self.target = Test(self)
+
+    def initialize(self):
+        self.state = IDLE
+        self.pressed = set()
 
     def do_process_key_event(self, keyval, keycode, state):
         print("process_key_event(%04x, %04x, %04x)" % (keyval, keycode, state))
-        # ignore key release events
+        print(self.state)
         is_press = ((state & IBus.ModifierType.RELEASE_MASK) == 0)
+
         if is_press:
-            return self.on_key_press(keyval, keycode, state)
+            if keycode in self.pressed:
+                print("SPURIOUS press", keycode)
+            self.pressed.add(keycode)
         else:
-            return self.on_key_release(keyval, keycode, state)
-
-        if self.__preedit_string:
-            if keyval == keysyms.Return:
-                self.__commit_string(self.__preedit_string)
-                return True
-            elif keyval == keysyms.Escape:
-                self.__preedit_string = ""
-                self.__update()
-                return True
-            elif keyval == keysyms.BackSpace:
-                self.__preedit_string = self.__preedit_string[:-1]
-                self.__invalidate()
-                return True
-            elif keyval == keysyms.space:
-                if self.__lookup_table.get_number_of_candidates() > 0:
-                    self.__commit_string(self.__lookup_table.get_current_candidate().text)
-                else:
-                    self.__commit_string(self.__preedit_string)
+            try:
+                self.pressed.remove(keycode)
+            except KeyError: # get rid of spurious keyReleases
+                print("SPURIOUS release", keycode)
                 return False
-            elif keyval >= 49 and keyval <= 57:
-                #keyval >= keysyms._1 and keyval <= keysyms._9
-                index = keyval - keysyms._1
-                candidates = self.__lookup_table.get_canidates_in_current_page()
-                if index >= len(candidates):
-                    return False
-                candidate = candidates[index].text
-                self.__commit_string(candidate)
-                return True
-        if keyval in range(keysyms.a, keysyms.z + 1) or \
-            keyval in range(keysyms.A, keysyms.Z + 1):
-            if state & (IBus.ModifierType.CONTROL_MASK | IBus.ModifierType.MOD1_MASK) == 0:
-                self.__preedit_string += chr(keyval)
-                self.__invalidate()
-                return True
+
+        if self.state == IDLE:
+            assert is_press
+            if self.target.on_new_sequence(keyval,keycode,state):
+                self.state = GRABBED
+            else:
+                self.state = PASS_THRU
+
+        grab = (self.state == GRABBED)
+        if not self.pressed:
+            self.state = IDLE
+
+        if grab:
+            t = time.time()*1000 #msec
+            if is_press:
+                return self.target.on_press(keyval, keycode, state,t,len(self.pressed))
+            else:
+                return self.target.on_release(keyval, keycode, state,t,len(self.pressed))
         else:
-            if keyval < 128 and self.__preedit_string:
-                self.__commit_string(self.__preedit_string)
+            return False
 
-        return False
 
-    def on_key_press(self, keyval, keycode, state):
-        islat =  0x20 <= keyval < 0x80 or 0xa0 <= keyval < 0x0100
-        if islat:
-            if keyval == ord('q'): sys.exit()
-            #if state & (IBus.ModifierType.CONTROL_MASK | IBus.ModifierType.MOD1_MASK) == 0:
-            self.__preedit_string += chr(keyval)
-            self.__invalidate()
-            return True
-        return False
+    def show_preedit(self, string):
+        self.__preedit_string = string
+        self.__update()
 
-    def on_key_release(self, keyval, keycode, state):
-        islat =  0x20 <= keyval < 0x80 or 0xa0 <= keyval < 0x0100
-        if islat:
-            self.__commit_string(self.__preedit_string)
-            return True
-        return False
 
-    def __invalidate(self):
-        if self.__is_invalidate:
-            return
-        self.__is_invalidate = True
-        GLib.idle_add(self.__update)
-
-    def __commit_string(self, text):
+    def commit_string(self, text):
         self.commit_text(IBus.Text.new_from_string(text))
         self.__preedit_string = ""
         self.__update()
@@ -123,13 +104,6 @@ class ChordEngine(IBus.Engine):
     def __update(self):
         preedit_len = len(self.__preedit_string)
         attrs = IBus.AttrList()
-        self.__lookup_table.clear()
-        if False:
-            if not self.__dict.check(self.__preedit_string):
-                attrs.append(IBus.Attribute.new(IBus.AttrType.FOREGROUND,
-                        0xff0000, 0, preedit_len))
-                for text in self.__dict.suggest(self.__preedit_string):
-                    self.__lookup_table.append_candidate(IBus.Text.new_from_string(text))
         text = IBus.Text.new_from_string(self.__preedit_string)
         text.set_attributes(attrs)
         #self.update_auxiliary_text(text, preedit_len > 0)
@@ -139,12 +113,7 @@ class ChordEngine(IBus.Engine):
         text = IBus.Text.new_from_string(self.__preedit_string)
         text.set_attributes(attrs)
         self.update_preedit_text(text, preedit_len, preedit_len > 0)
-        self.__update_lookup_table()
         self.__is_invalidate = False
-
-    def __update_lookup_table(self):
-        visible = self.__lookup_table.get_number_of_candidates() > 0
-        self.update_lookup_table(self.__lookup_table, visible)
 
 
     def do_focus_in(self):
@@ -160,6 +129,41 @@ class ChordEngine(IBus.Engine):
     def do_property_activate(self, prop_name):
         print("PropertyActivate(%s)" % prop_name)
 
+class ChordEngine(BaseEngine):
+    __gtype_name__ = 'ChordEngine'
+    def __init__(self):
+        super(BaseEngine, self).__init__()
+        from KeyboardChorder import KeyboardChorder
+        self.target = KeyboardChorder(self)
+
+class Test:
+    def __init__(self, im):
+        self.im = im
+        self.string = ''
+
+    def on_new_sequence(self, keyval, keycode, state):
+        print( "NEU", keyval, keycode, state )
+        if keyval == ord('q'): sys.exit()
+        return islatin(keyval) and not  state & (IBus.ModifierType.CONTROL_MASK | IBus.ModifierType.MOD1_MASK)
+
+    def on_press(self, keyval, keycode, state, time, pressed):
+        print( "PRESS", keyval, keycode, state, pressed)
+        #if state & (IBus.ModifierType.CONTROL_MASK | IBus.ModifierType.MOD1_MASK) == 0:
+        if islatin(keyval):
+            self.string += chr(keyval)
+        self.im.show_preedit(self.string)
+        return True
+
+    def on_release(self, keyval, keycode, state, time, pressed):
+        print( "release", keyval, keycode, state, pressed)
+        if islatin(keyval):
+            self.im.commit_string(self.string)
+            self.string = ''
+            return True
+        return True
+
+def islatin(nbr):
+        return 0x20 <= nbr < 0x80 or 0xa0 <= nbr < 0x0100
 
 class IMApp:
     def __init__(self, exec_by_ibus):
@@ -187,7 +191,7 @@ class IMApp:
         self.__bus.connect("disconnected", self.__bus_disconnected_cb)
         self.__factory = IBus.Factory.new(self.__bus.get_connection())
         self.__factory.add_engine("KeyboardChorder",
-                GObject.type_from_name("ChordEngine"))
+                GObject.type_from_name("BaseEngine"))
         if exec_by_ibus:
             self.__bus.request_name("com.github.bfredl.KeyboardChorder", 0)
         else:
