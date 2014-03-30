@@ -15,15 +15,67 @@ typemap = { KeyPressEvent:2, KeyReleaseEvent:3}
 def InternAtom(core,string, only_if_exists=False):
     return core.InternAtom(only_if_exists, len(string), string).reply().atom
 
-# Still leaks X abstraction (like any of your favourite X11 toolkit)
-# bcuz one does not simply "abstract away" x keyboard semantics
-# But wayland is xkb based anyways...
-class KeyboardGrabber(object):
-    def __init__(self,reciever):
+def islatin(nbr):
+        return 0x20 <= nbr < 0x80 or 0xa0 <= nbr < 0x0100
+
+def char_to_keysym(ch):
+    ucs = ord(ch)
+    if islatin(usc):
+        return ucs
+    return 0#FIXME
+
+def str_to_keysym(string):
+    sym = XK.string_to_keysym(string)
+    if sym == 0 and len(string) == 1:
+        ucs = ord(string)
+        if islatin(ucs):
+            sym = ucs
+    return sym
+
+#TODO: stop NIH:ing, use libxkbcommon, or something else sanity-preserving 
+class XKeyboard(object):
+    def __init__(self):
         self.conn = xcb.connect()
         self.X = self.conn.core
         self.root = self.conn.get_setup().roots[0].root
-        self._update_keymap()
+        self.update_keymap()
+
+    def update_keymap(self):
+        setup = self.conn.get_setup()
+        self.min_keycode = setup.min_keycode  
+        self.max_keycode = setup.max_keycode  
+        #SRSLY, X?
+        self.keymap = self.X.GetKeyboardMapping(self.min_keycode, self.max_keycode - self.min_keycode + 1).reply()
+
+    def keycode_to_keysym(self,keycode,state):
+        stride = self.keymap.keysyms_per_keycode
+        mn = self.min_keycode
+        ind = (keycode - mn) * stride + state_to_level(state)
+        return self.keymap.keysyms[ind]
+
+    def lookup_keysym(self,keysym):
+        if isinstance(keysym,basestring):
+            keysym,ks = string_to_keysym(keysym), keysym
+            if keysym == 0:
+                raise KeyError(ks)
+        stride = self.keymap.keysyms_per_keycode
+        mn = self.min_keycode
+        keymap = self.keymap.keysyms
+        indicies = [i for i, x in enumerate(keymap) if x == keysym]
+        pairs = [ ( (i/stride)+mn, level_to_state(i%stride)) for i in indicies]
+        pairs.sort(key=lambda x: x[1])
+        return pairs
+
+    def lookup_char(self,ch):
+        return self.lookup_keysym(char_to_keysym(ch))
+
+
+# Still leaks X abstraction (like any of your favourite X11 toolkit)
+# bcuz one does not simply "abstract away" x keyboard semantics
+# But wayland is xkb based anyways...
+class KeyboardGrabber(XKeyboard):
+    def __init__(self,reciever):
+        super(KeyboardGrabber, self).__init__()
 
         self.grabExclude = [XK.XK_Super_L]
 
@@ -79,7 +131,7 @@ class KeyboardGrabber(object):
             self._sequence_event(ev)
             self.X.AllowEventsChecked(X.AsyncKeyboard, X.CurrentTime).check()
         elif isinstance(ev,xproto.MappingNotifyEvent):
-            self._update_keymap()
+            self.update_keymap()
             self.reciever.on_keymap_change()
         else:
             print ev
@@ -194,36 +246,6 @@ class KeyboardGrabber(object):
         self.fake_event(2,keycode,shift_state,window)
         self.fake_event(3,keycode,shift_state,window)
 
-    #TODO: stop NIH:ing, use libxkbcommon, or something else sanity-preserving 
-    def _update_keymap(self):
-        setup = self.conn.get_setup()
-        self.min_keycode = setup.min_keycode  
-        self.max_keycode = setup.max_keycode  
-        #SRSLY, X?
-        self.keymap = self.X.GetKeyboardMapping(self.min_keycode, self.max_keycode - self.min_keycode + 1).reply()
-
-    def keycode_to_keysym(self,keycode,state):
-        stride = self.keymap.keysyms_per_keycode
-        mn = self.min_keycode
-        ind = (keycode - mn) * stride + state_to_level(state)
-        return self.keymap.keysyms[ind]
-
-    def lookup_keysym(self,keysym):
-        if isinstance(keysym,basestring):
-            keysym,ks = XK.string_to_keysym(keysym), keysym
-            if keysym == 0:
-                raise KeyError(ks)
-        stride = self.keymap.keysyms_per_keycode
-        mn = self.min_keycode
-        keymap = self.keymap.keysyms
-        indicies = [i for i, x in enumerate(keymap) if x == keysym]
-        pairs = [ ( (i/stride)+mn, level_to_state(i%stride)) for i in indicies]
-        pairs.sort(key=lambda x: x[1])
-        return pairs
-
-    def lookup_char(self,ch):
-        return self.lookup_keysym(char_to_keysym(ch))
-
     #FIXME: we might want to send chars not mapped on keyboard
     def send_key(self,char):
         pass
@@ -232,11 +254,6 @@ class KeyboardGrabber(object):
         keycode = 10 #FIXME
         self.fake_event(KeyPressEvent, keycode,window=self.target)
         self.fake_event(KeyReleaseEvent, keycode,window=self.target)
-
-def char_to_keysym(ch):
-    ucs = ord(ch)
-    if 0x20 <= ucs < 0x80 or 0xa0 <= ucs < 0x0100:
-        return ucs
 
 # In the general case, this is of course ALL WRONG
 def level_to_state(lvl):

@@ -9,8 +9,8 @@ LEVEL3 = 0x80
 
 dbg = True
 class KeyboardChorder(object):
-    def __init__(self):
-        self.kb = KeyboardGrabber(self)
+    def __init__(self, im):
+        self.im = im
         self.modThreshold = 200
         self.modThreshold2 = 300
         self.chordTreshold = 2.0
@@ -37,7 +37,7 @@ class KeyboardChorder(object):
             'qc': '7',
             'jc': '8',
             'kc': '9',
-            'a0': self.kb.pause,
+            'a0': self.pause,
             'or': u'ö', 'ocr': u'Ö',
             'er': u'ä', 'ecr': u'Ä',
             'ar': u'å', 'acr': u'Å',
@@ -56,33 +56,28 @@ class KeyboardChorder(object):
             'colon': CTRL
         }
         ignore = { 'BackSpace', 'Control_L', 'Shift_L', 0xFE03, 'Alt_L'}
-        ch_code = u'ö'
+        ch_char = u'ö'
 
-        def pair(ch):
-            return self.kb.lookup_char(ch)[0]
         def code_s(s):
             if s == 'HOLD': return s
-            syms = self.kb.lookup_keysym(s)
+            syms = self.im.lookup_keysym(s)
             return syms[0][0] if syms else s
 
         self.remap = {}
+        #FIXME: represent state with keysyms instead
         for desc, val in chords.items():
             chord = []
             for ch in desc:
-                chord.append(pair(ch)[0])
-            if isinstance(val, basestring):
-                seq = [ self.kb.lookup_char(ch)[0] for ch in val]
-            else:
-                seq = val
-            self.remap[tuple(sorted(chord))] = seq 
+                chord.append(code_s(ch))
+            self.remap[tuple(sorted(chord))] = val 
+        print self.remap
 
         self.modmap = { code_s(s) or s: mod for s, mod in modmap.iteritems()}
         self.ignore = { code_s(s) for s in ignore}
         self.ignore.add(108)
-        self.ch_code  = pair(ch_code)
+        self.ch_char  = ch_char
 
-    def psym(self,keycode,state):
-        val = self.kb.keycode_to_keysym(keycode,state)
+    def psym(self,val):
         if 0x20 <= val < 0x80 or 0xa0 <= val < 0x0100:
             return chr(val)
         else:
@@ -93,8 +88,11 @@ class KeyboardChorder(object):
             self.kb.run()
         except KeyboardInterrupt:
             pass
+
+    def pause(self):
+        pass
             
-    def on_new_sequence(self, keycode, state, time):
+    def on_new_sequence(self, keyval, keycode, state, time):
         if keycode in self.ignore:
             return False 
         self.seq = []
@@ -104,16 +102,18 @@ class KeyboardChorder(object):
         self.last_nonchord = 0
         return True
 
-    def on_press(self,keycode,state,time,pressed):
+    def on_press(self, keyval, keycode,state,time,pressed):
         self.seq.append(keycode)
         self.times.append(time)
         self.last_time = time
+        self.update_display()
         if dbg:
-            print '+', self.psym(keycode,state), time-self.seq_time
+            print '+', self.psym(keyval), time-self.seq_time
+        return True
 
-    def on_release(self,keycode,state,time,pressed):
+    def on_release(self, keyval, keycode,state,time,pressed):
         if dbg:
-            print '-', self.psym(keycode,state), time-self.seq_time
+            print '-', self.psym(keyval), time-self.seq_time
         if keycode in self.dead:
             self.dead.remove(keycode)
         else:
@@ -122,9 +122,12 @@ class KeyboardChorder(object):
                 self.dead.update([k for k in dead if k != keycode])
             else: 
                 self.last_nonchord = time
-                self.emit_key(keycode,state)
+                self.im.show_preedit('')
+                self.im.fake_stroke(keyval,keycode,state)
         self.seq.remove(keycode)
         self.last_time = time
+        self.update_display()
+        return True
 
     def on_repeat(self, *a):
         pass # (:
@@ -132,9 +135,11 @@ class KeyboardChorder(object):
     def on_keymap_change(self):
         self.configure()
 
-    def emit_key(self,keycode,state):
-        self.kb.fake_stroke(keycode,state)
-        #print "EMIT", keycode, state
+    def update_display(self):
+        if self.seq:
+            self.im.show_preedit(str(len(self.seq)))
+        else:
+            self.im.show_preedit('')
 
     #FIXME: return actions instead for OSD preview
     def emit_chord(self,time,keycode):
@@ -157,14 +162,14 @@ class KeyboardChorder(object):
                         return False
 
         chord = tuple(sorted(self.seq))
-        #keysym = self.kb.keycode_to_keysym(keycode,0) #[sic]
+        print(chord)
+        #keysym = self.im.keycode_to_keysym(keycode,0) #[sic]
         if chord in self.remap:
             seq = self.remap[chord]
             if callable(seq):
                 seq()
             else:
-                for key in seq:
-                    self.kb.fake_stroke(*key)
+                self.im.commit_string(seq)
             return chord
 
         modmap = self.modmap
@@ -177,19 +182,20 @@ class KeyboardChorder(object):
             elif keycode not in other:
                 return chord# ambigous: do nothing
 
-            self.kb.fake_stroke(keycode,state)
+            self.im.fake_stroke(None,keycode,state)
             return modders | {keycode}
 
 
         if len(chord) == 1:
             keycode, = chord
-            self.kb.fake_stroke(keycode,modmap['HOLD'])
+            self.im.fake_stroke(None,keycode,modmap['HOLD'])
             return chord
         else:
+            #FIXME; RETHINK
             return False
-            self.kb.fake_stroke(*self.ch_code)
+            self.im.fake_stroke(*self.ch_code)
             for key in chord:
-                self.kb.fake_stroke(*key)
+                self.im.fake_stroke(*key)
             print ""
 
 if __name__ == "__main__":

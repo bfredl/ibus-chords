@@ -24,12 +24,14 @@ from __future__ import print_function
 from gi.repository import IBus
 from gi.repository import GLib
 from gi.repository import GObject
+from gi.repository import Gdk
 
 import os
 import sys
 import getopt
 import locale
 import time
+from xkeyboard import islatin, str_to_keysym
 
 keysyms = IBus
 
@@ -49,15 +51,25 @@ class BaseEngine(IBus.Engine):
         self.__prop_list.append(IBus.Property(key="test", icon="ibus-local"))
         #override this in subclass
         self.target = Test(self)
+        self.keymap = Gdk.Keymap.get_default()
+        self.keymap.connect('keys_changed', lambda *a: self.target.on_keymap_change())
+
+        #FIXME: handle this EPIC fail more systematically 
+        self.offset = 8
 
     def initialize(self):
         self.state = IDLE
         self.pressed = set()
 
     def do_process_key_event(self, keyval, keycode, state):
-        print("process_key_event(%04x, %04x, %04x)" % (keyval, keycode, state))
+        t = time.time()*1000 #msec
+        print("process_key_event(%04x, %d, %04x)" % (keyval, keycode, state))
         print(self.state)
         is_press = ((state & IBus.ModifierType.RELEASE_MASK) == 0)
+        state &= ~IBus.ModifierType.RELEASE_MASK
+        
+        # IBUS! this one you fucked up:
+        keycode += self.offset
 
         if is_press:
             if keycode in self.pressed:
@@ -72,7 +84,7 @@ class BaseEngine(IBus.Engine):
 
         if self.state == IDLE:
             assert is_press
-            if self.target.on_new_sequence(keyval,keycode,state):
+            if self.target.on_new_sequence(keyval,keycode,state, t):
                 self.state = GRABBED
             else:
                 self.state = PASS_THRU
@@ -82,7 +94,6 @@ class BaseEngine(IBus.Engine):
             self.state = IDLE
 
         if grab:
-            t = time.time()*1000 #msec
             if is_press:
                 return self.target.on_press(keyval, keycode, state,t,len(self.pressed))
             else:
@@ -101,6 +112,17 @@ class BaseEngine(IBus.Engine):
         self.__preedit_string = ""
         self.__update()
 
+    def fake_stroke(self, keyval, keycode, state):
+        if keyval is None:
+            ok, keyval, _, _, _ = self.keymap.translate_keyboard_state(keycode, Gdk.ModifierType(state), 0)
+            if not ok: 
+                print( 'ERROR')
+
+        # le sigh...
+        keycode -= self.offset
+        self.forward_key_event(keyval, keycode, state)
+        self.forward_key_event(keyval, keycode, state | IBus.ModifierType.RELEASE_MASK)
+
     def __update(self):
         preedit_len = len(self.__preedit_string)
         attrs = IBus.AttrList()
@@ -114,6 +136,17 @@ class BaseEngine(IBus.Engine):
         text.set_attributes(attrs)
         self.update_preedit_text(text, preedit_len, preedit_len > 0)
         self.__is_invalidate = False
+
+    def lookup_keysym(self,keyval):
+        if isinstance(keyval,basestring):
+            keyval,ks = str_to_keysym(keyval), keyval
+            if keyval == 0:
+                raise KeyError(ks)
+        ok, res = self.keymap.get_entries_for_keyval(keyval)
+        if not ok: return []
+        pairs = [(r.keycode, r.level) for r in res if r.group == 0]
+        pairs.sort(key=lambda x: x[1])
+        return pairs
 
 
     def do_focus_in(self):
@@ -132,7 +165,7 @@ class BaseEngine(IBus.Engine):
 class ChordEngine(BaseEngine):
     __gtype_name__ = 'ChordEngine'
     def __init__(self):
-        super(BaseEngine, self).__init__()
+        super(ChordEngine, self).__init__()
         from KeyboardChorder import KeyboardChorder
         self.target = KeyboardChorder(self)
 
@@ -141,7 +174,7 @@ class Test:
         self.im = im
         self.string = ''
 
-    def on_new_sequence(self, keyval, keycode, state):
+    def on_new_sequence(self, keyval, keycode, state, time):
         print( "NEU", keyval, keycode, state )
         if keyval == ord('q'): sys.exit()
         return islatin(keyval) and not  state & (IBus.ModifierType.CONTROL_MASK | IBus.ModifierType.MOD1_MASK)
@@ -161,9 +194,6 @@ class Test:
             self.string = ''
             return True
         return True
-
-def islatin(nbr):
-        return 0x20 <= nbr < 0x80 or 0xa0 <= nbr < 0x0100
 
 class IMApp:
     def __init__(self, exec_by_ibus):
@@ -191,7 +221,7 @@ class IMApp:
         self.__bus.connect("disconnected", self.__bus_disconnected_cb)
         self.__factory = IBus.Factory.new(self.__bus.get_connection())
         self.__factory.add_engine("KeyboardChorder",
-                GObject.type_from_name("BaseEngine"))
+                GObject.type_from_name("ChordEngine"))
         if exec_by_ibus:
             self.__bus.request_name("com.github.bfredl.KeyboardChorder", 0)
         else:
