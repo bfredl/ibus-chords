@@ -2,12 +2,15 @@
 from xkeyboard import KeyboardGrabber
 from Xlib import XK
 from operator import or_
+from collections import namedtuple
 
 SHIFT = 0x01
 CTRL = 0x04
 LEVEL3 = 0x80
 
 dbg = True
+
+Press = namedtuple('Press', ['keyval','keycode','state','time'])
 class KeyboardChorder(object):
     def __init__(self, im):
         self.im = im
@@ -96,15 +99,16 @@ class KeyboardChorder(object):
         if keycode in self.ignore:
             return False 
         self.seq = []
-        self.seq_time = time 
-        self.times = []
+        self.down = {}
         self.dead = set()
+        self.seq_time = time 
         self.last_nonchord = 0
         return True
 
-    def on_press(self, keyval, keycode,state,time,pressed):
-        self.seq.append(keycode)
-        self.times.append(time)
+    def on_press(self, keyval, keycode, state, time, pressed):
+        p = Press(keyval, keycode, state, time)
+        self.down[keycode] = p
+        self.seq.append(p)
         self.last_time = time
         self.update_display()
         if dbg:
@@ -116,15 +120,25 @@ class KeyboardChorder(object):
             print '-', self.psym(keyval), time-self.seq_time
         if keycode in self.dead:
             self.dead.remove(keycode)
+            res = []
+            dead = ()
         else:
-            dead = self.emit_chord(time,keycode)
-            if dead:
-                self.dead.update([k for k in dead if k != keycode])
-            else: 
-                self.last_nonchord = time
-                self.im.show_preedit('')
-                self.im.fake_stroke(keyval,keycode,state)
-        self.seq.remove(keycode)
+            dead, res = self.get_chord(time,keycode)
+            if not dead:
+                #TODO: maybe latch 'sequential mode'?
+                dead = self.down.keys()
+                res = list(self.seq)
+        self.dead.update([k for k in dead if k != keycode])
+        self.seq = [p for p in self.seq if p.keycode not in dead]
+        del self.down[keycode]
+        if res: self.im.show_preedit('')
+        if callable(res):
+            res()
+        elif isinstance(res, basestring):
+            self.im.commit_string(res)
+        else:
+            for p in res:
+                self.im.fake_stroke(*p[:3])
         self.last_time = time
         self.update_display()
         return True
@@ -142,61 +156,57 @@ class KeyboardChorder(object):
             self.im.show_preedit('')
 
     #FIXME: return actions instead for OSD preview
-    def emit_chord(self,time,keycode):
-        n = len(self.seq)
+    def get_chord(self,time,keycode):
+        nochord = ((), [])
+        n = len(self.down)
+        times = sorted( p.time for p in self.down.values())
         hold = time - self.last_time >= self.modThreshold
         if len(self.dead) == 0:
             if n == 1 and not hold:
-                return False
+                return nochord
                     
             # risk of conflict with slightly overlapping sequence
             if n == 2 and not hold:
-                hold2 = time - self.times[-2] >= self.modThreshold2
+                hold2 = time - times[-2] >= self.modThreshold2
                 if time - self.last_nonchord < 120:
-                    return False
-                if keycode == self.seq[0] and not hold2: # ab|ba is always chord
+                    return nochord
+                if keycode == self.seq[0].keycode and not hold2: # ab|ba is always chord
                     print '!hold2'
-                    t0, t1 = self.times[-2:]
+                    t0, t1 = times[-2:]
                     t2 = time
                     if t2-t1 < (self.chordTreshold)*(t1-t0):
-                        return False
+                        return nochord
 
-        chord = tuple(sorted(self.seq))
+        chord = tuple(sorted([ p.keycode for p in self.down.values()]))
         print(chord)
         #keysym = self.im.keycode_to_keysym(keycode,0) #[sic]
         if chord in self.remap:
             seq = self.remap[chord]
-            if callable(seq):
-                seq()
-            else:
-                self.im.commit_string(seq)
-            return chord
+            return chord, seq
 
         modmap = self.modmap
         modders = set(chord) &  modmap.viewkeys()
         state = reduce(or_, (modmap[k] for k in modders),0)
         other = set(chord) - modders
         if modders and other:
+            #FIXME: not ambigous anymore, fire of 'other' in order in self.seq
             if len(other) == 1:
                 keycode = other.pop() 
             elif keycode not in other:
-                return chord# ambigous: do nothing
+                return chord, []# ambigous: do nothing
 
-            self.im.fake_stroke(None,keycode,state)
-            return modders | {keycode}
-
+            return modders | {keycode}, [(None,keycode,state)]
 
         if len(chord) == 1:
             keycode, = chord
-            self.im.fake_stroke(None,keycode,modmap['HOLD'])
-            return chord
+            self.im.fake_stroke
+            return chord, [(None,keycode,modmap['HOLD'])]
         else:
             #FIXME; RETHINK
-            return False
+            return nochord
             self.im.fake_stroke(*self.ch_code)
             for key in chord:
                 self.im.fake_stroke(*key)
-            print ""
 
 if __name__ == "__main__":
     import time
