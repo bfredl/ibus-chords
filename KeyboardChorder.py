@@ -102,18 +102,22 @@ class KeyboardChorder(object):
         self.down = {}
         self.dead = set()
         self.seq_time = time 
+        self.seq_d = False
         self.last_nonchord = 0
         return True
 
     def on_press(self, keyval, keycode, state, time, pressed):
         p = Press(keyval, keycode, state, time)
         self.down[keycode] = p
-        self.seq.append(p)
+        if not self.seq_d:
+            self.seq.append(p)
+        else:
+            self.dead.add(keycode)
         self.last_time = time
         self.update_display()
         if dbg:
             print '+', self.psym(keyval), time-self.seq_time
-        return True
+        return not self.seq_d
 
     def on_release(self, keyval, keycode,state,time,pressed):
         if dbg:
@@ -128,6 +132,7 @@ class KeyboardChorder(object):
                 #TODO: maybe latch 'sequential mode'?
                 dead = self.down.keys()
                 res = list(self.seq)
+                self.seq_d = True
         self.dead.update([k for k in dead if k != keycode])
         self.seq = [p for p in self.seq if p.keycode not in dead]
         del self.down[keycode]
@@ -150,8 +155,8 @@ class KeyboardChorder(object):
         self.configure()
 
     def update_display(self):
-        if self.seq:
-            self.im.show_preedit(str(len(self.seq)))
+        if self.down:
+            self.im.show_preedit('{} {}'.format(len(self.down),len(self.seq)))
         else:
             self.im.show_preedit('')
 
@@ -203,6 +208,7 @@ class KeyboardChorder(object):
             return chord, [(None,keycode,modmap['HOLD'])]
         else:
             #FIXME; RETHINK
+            print('FAULT')
             return nochord
             self.im.fake_stroke(*self.ch_code)
             for key in chord:

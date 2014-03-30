@@ -63,8 +63,8 @@ class BaseEngine(IBus.Engine):
 
     def do_process_key_event(self, keyval, keycode, state):
         t = time.time()*1000 #msec
-        print("process_key_event(%04x, %d, %04x)" % (keyval, keycode, state))
-        print(self.state)
+        #print("process_key_event(%04x, %d, %04x)" % (keyval, keycode, state))
+        #print(self.state)
         is_press = ((state & IBus.ModifierType.RELEASE_MASK) == 0)
         state &= ~IBus.ModifierType.RELEASE_MASK
         
@@ -92,6 +92,7 @@ class BaseEngine(IBus.Engine):
         grab = (self.state == GRABBED)
         if not self.pressed:
             self.state = IDLE
+        #print(self.state, self.pressed)
 
         if grab:
             if is_press:
