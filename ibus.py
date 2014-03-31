@@ -135,7 +135,9 @@ class BaseEngine(IBus.Engine):
         #       IBus.AttrUnderline.SINGLE, 0, preedit_len))
         text = IBus.Text.new_from_string(self.__preedit_string)
         text.set_attributes(attrs)
-        self.update_preedit_text(text, preedit_len, preedit_len > 0)
+        #This is broken in latest Gvim (normal mode interprets preedit as commands => epic chaos)
+        #self.update_preedit_text_with_mode(text, preedit_len, preedit_len > 0, IBus.PreeditFocusMode.CLEAR)
+        self.update_auxiliary_text(text, preedit_len > 0)
         self.__is_invalidate = False
 
     def lookup_keysym(self,keyval):

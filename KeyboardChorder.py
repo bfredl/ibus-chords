@@ -14,9 +14,10 @@ Press = namedtuple('Press', ['keyval','keycode','state','time'])
 class KeyboardChorder(object):
     def __init__(self, im):
         self.im = im
-        self.modThreshold = 200
-        self.modThreshold2 = 300
+        self.holdThreshold = 200
+        self.holdThreshold2 = 300
         self.chordTreshold = 2.0
+        self.modThreshold = 0.5
 
         self.configure()
 
@@ -96,7 +97,7 @@ class KeyboardChorder(object):
         pass
             
     def on_new_sequence(self, keyval, keycode, state, time):
-        if keycode in self.ignore:
+        if keycode in self.ignore or (state & 4):
             return False 
         self.seq = []
         self.down = {}
@@ -165,54 +166,46 @@ class KeyboardChorder(object):
         nochord = ((), [])
         n = len(self.down)
         times = sorted( p.time for p in self.down.values())
-        hold = time - self.last_time >= self.modThreshold
+        chord = tuple(sorted([ p.keycode for p in self.down.values()]))
+        modders = set(chord) &  self.modmap.viewkeys()
+        hold = time - self.last_time >= self.holdThreshold
         if len(self.dead) == 0:
             if n == 1 and not hold:
                 return nochord
                     
             # risk of conflict with slightly overlapping sequence
             if n == 2 and not hold:
-                hold2 = time - times[-2] >= self.modThreshold2
-                if time - self.last_nonchord < 120:
-                    return nochord
+                hold2 = time - times[-2] >= self.holdThreshold2
                 if keycode == self.seq[0].keycode and not hold2: # ab|ba is always chord
-                    print '!hold2'
+                    th = self.chordTreshold
+                    if self.seq[0].keycode in modders:
+                        th = self.modThreshold
                     t0, t1 = times[-2:]
                     t2 = time
-                    if t2-t1 < (self.chordTreshold)*(t1-t0):
+                    if t2-t1 < th*(t1-t0):
                         return nochord
 
-        chord = tuple(sorted([ p.keycode for p in self.down.values()]))
-        print(chord)
         #keysym = self.im.keycode_to_keysym(keycode,0) #[sic]
         if chord in self.remap:
             seq = self.remap[chord]
             return chord, seq
 
-        modmap = self.modmap
-        modders = set(chord) &  modmap.viewkeys()
-        state = reduce(or_, (modmap[k] for k in modders),0)
-        other = set(chord) - modders
-        if modders and other:
-            #FIXME: not ambigous anymore, fire of 'other' in order in self.seq
-            if len(other) == 1:
-                keycode = other.pop() 
-            elif keycode not in other:
-                return chord, []# ambigous: do nothing
-
-            return modders | {keycode}, [(None,keycode,state)]
+        state = reduce(or_, (self.modmap[k] for k in modders),0)
+        if modders:
+            modseq = []
+            for p in self.seq:
+                if p.keycode not in modders:
+                    modseq.append((None,p.keycode,state))
+            if modseq:
+                return chord, modseq
 
         if len(chord) == 1:
             keycode, = chord
-            self.im.fake_stroke
-            return chord, [(None,keycode,modmap['HOLD'])]
+            return chord, [(None,keycode,self.modmap['HOLD'])]
         else:
             #FIXME; RETHINK
             print('FAULT')
             return nochord
-            self.im.fake_stroke(*self.ch_code)
-            for key in chord:
-                self.im.fake_stroke(*key)
 
 if __name__ == "__main__":
     import time
