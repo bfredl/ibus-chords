@@ -21,6 +21,7 @@ class SimpleNamespace:
         return self.__dict__ == other.__dict__
 
 Press = namedtuple('Press', ['keyval','keycode','state','time'])
+Shift = namedtuple('Shift', ['base', 'hold'])
 class KeyboardChorder(object):
     def __init__(self, im):
         self.im = im
@@ -29,9 +30,13 @@ class KeyboardChorder(object):
 
     def configure(self):
         #FIXME: place these in a class w defaults
+        def Sym(s):
+            return [(None,)+self.im.lookup_keysym(s)[0]]
         conf = SimpleNamespace(
             pause=self.pause,
             conf=self.configure,
+            Shift=Shift,
+            Sym=Sym,
             SHIFT=0x01,
             CTRL=0x04,
             LEVEL3=0x80,
@@ -167,6 +172,8 @@ class KeyboardChorder(object):
         #keysym = self.im.keycode_to_keysym(keycode,0) #[sic]
         if chord in self.remap:
             seq = self.remap[chord]
+            if isinstance(seq, Shift):
+                seq = seq.hold if hold else seq.base
             return chord, seq
 
         state = reduce(or_, (self.modmap[k] for k in modders),0)
