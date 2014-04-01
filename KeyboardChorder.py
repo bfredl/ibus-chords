@@ -31,6 +31,7 @@ class KeyboardChorder(object):
         #FIXME: place these in a class w defaults
         conf = SimpleNamespace(
             pause=self.pause,
+            conf=self.configure,
             SHIFT=0x01,
             CTRL=0x04,
             LEVEL3=0x80,
