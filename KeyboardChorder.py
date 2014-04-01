@@ -3,64 +3,43 @@ from xkeyboard import KeyboardGrabber
 from Xlib import XK
 from operator import or_
 from collections import namedtuple
+import os.path as path
 
 SHIFT = 0x01
 CTRL = 0x04
 LEVEL3 = 0x80
 
 dbg = True
+class SimpleNamespace:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+    def __repr__(self):
+        keys = sorted(self.__dict__)
+        items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
+        return "{}({})".format(type(self).__name__, ", ".join(items))
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 Press = namedtuple('Press', ['keyval','keycode','state','time'])
 class KeyboardChorder(object):
     def __init__(self, im):
         self.im = im
-        self.holdThreshold = 200
-        self.holdThreshold2 = 300
-        self.chordTreshold = 2.0
-        self.modThreshold = 0.5
-
+        self.conf_file = path.expanduser('~/.config/chords')
         self.configure()
 
     def configure(self):
-        #TODO this belongs in 'config' repo where the keymap is
-        chords = {
-            'eh': 'F',
-            'ut': 'f',
-            'as': ' = ',
-            'is': ' == ',
-            '\'c': '\': \'',
-            'oe': ' += ',
-            'ht': '()',
-            'ac': '0',
-            'oc': '1',
-            'ec': '2',
-            'uc': '3',
-            ',c': '4',
-            '.c': '5',
-            'pc': '6',
-            'qc': '7',
-            'jc': '8',
-            'kc': '9',
-            'a0': self.pause,
-            'or': u'ö', 'ocr': u'Ö',
-            'er': u'ä', 'ecr': u'Ä',
-            'ar': u'å', 'acr': u'Å',
-            'el': '} else {',
-            ' :': ';',
-            'uh': '{',
-            'et': '}',
-            'jh': '{{{',
-            'kh': '}}}',
-        }
-
-        modmap = {
-            'HOLD': SHIFT,
-            'space': LEVEL3,
-            'Escape': LEVEL3 | SHIFT,
-            'colon': CTRL
-        }
-        ignore = { 'BackSpace', 'Control_L', 'Shift_L', 0xFE03, 'Alt_L'}
-        ch_char = u'ö'
+        #FIXME: place these in a class w defaults
+        conf = SimpleNamespace(
+            pause=self.pause,
+            SHIFT=0x01,
+            CTRL=0x04,
+            LEVEL3=0x80,
+        )
+        execfile(self.conf_file,conf.__dict__)
+        self.holdThreshold = conf.holdThreshold
+        self.holdThreshold2 = conf.holdThreshold2
+        self.chordTreshold = conf.chordTreshold
+        self.modThreshold = conf.modThreshold
 
         def code_s(s):
             if s == 'HOLD': return s
@@ -68,18 +47,17 @@ class KeyboardChorder(object):
             return syms[0][0] if syms else s
 
         self.remap = {}
-        #FIXME: represent state with keysyms instead
-        for desc, val in chords.items():
+        for desc, val in conf.chords.items():
             chord = []
             for ch in desc:
                 chord.append(code_s(ch))
             self.remap[tuple(sorted(chord))] = val 
         print self.remap
 
-        self.modmap = { code_s(s) or s: mod for s, mod in modmap.iteritems()}
-        self.ignore = { code_s(s) for s in ignore}
+        self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.iteritems()}
+        self.ignore = { code_s(s) for s in conf.ignore}
         self.ignore.add(108)
-        self.ch_char  = ch_char
+        self.ch_char  = conf.ch_char
 
     def psym(self,val):
         if 0x20 <= val < 0x80 or 0xa0 <= val < 0x0100:
@@ -95,7 +73,7 @@ class KeyboardChorder(object):
 
     def pause(self):
         pass
-            
+
     def on_new_sequence(self, keyval, keycode, state, time):
         if keycode in self.ignore or (state & 4):
             return False 
