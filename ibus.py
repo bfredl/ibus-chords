@@ -155,6 +155,7 @@ class BaseEngine(IBus.Engine):
     def do_focus_in(self):
         print("focus_in")
         self.register_properties(self.__prop_list)
+        self.initialize()
 
     def do_focus_out(self):
         print("focus_out")
