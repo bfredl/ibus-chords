@@ -1,3 +1,4 @@
+from __future__ import print_function
 from Xlib import X,XK
 import xcb, xcb.xproto as xproto 
 from xcb.xproto import KeyPressEvent, KeyReleaseEvent
@@ -134,7 +135,7 @@ class KeyboardGrabber(XKeyboard):
             self.update_keymap()
             self.reciever.on_keymap_change()
         else:
-            print ev
+            print(ev)
 
     def _handle_focus(self):
         self.target = self.X.GetInputFocus().reply().focus
@@ -268,14 +269,14 @@ class Test:
         self.kb.run()
     # these are for testing
     def on_new_sequence(self,keycode,state):
-        print "NEU", keycode, state 
+        print( "NEU", keycode, state )
         return keycode != 108
 
     def on_press(self,keycode,state,time,pressed):
-        print "PRESS", keycode, state, pressed
+        print( "PRESS", keycode, state, pressed)
 
     def on_release(self,keycode,state,time,pressed):
-        print "RELEASE", keycode, state, pressed
+        print( "RELEASE", keycode, state, pressed)
         if keycode == 10:
             self.kb.send_key('1')
         sym0 = self.kb.keycode_to_keysym(keycode,0)
@@ -283,7 +284,7 @@ class Test:
             raise KeyboardInterrupt
 
     def on_repeat(self,keycode,state,time):
-        #print "REPEAT", ev
+        #print( "REPEAT", ev)
         pass
 
 

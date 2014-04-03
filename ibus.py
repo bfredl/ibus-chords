@@ -1,5 +1,6 @@
-# vim:set et sts=4 sw=4:
+#!/usr/bin/env python2
 # encoding: utf8
+# vim:set et sts=4 sw=4:
 # ibus-tmpl - The Input Bus template project
 #
 # Copyright (c) 2007-2014 Peng Huang <shawn.p.huang@gmail.com>
@@ -38,6 +39,14 @@ keysyms = IBus
 IDLE = 0
 GRABBED = 1
 PASS_THRU = 2
+
+def set_proc_name(newname):
+    from ctypes import cdll, byref, create_string_buffer
+    libc = cdll.LoadLibrary('libc.so.6')
+    buff = create_string_buffer(len(newname)+1)
+    buff.value = newname
+    libc.prctl(15, byref(buff), 0, 0, 0)
+
 
 class BaseEngine(IBus.Engine):
     __gtype_name__ = 'BaseEngine'
@@ -285,4 +294,5 @@ def main():
     launch_engine(exec_by_ibus)
 
 if __name__ == "__main__":
+    set_proc_name('keyboard-chorder')
     main()
