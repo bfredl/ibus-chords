@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from xkeyboard import KeyboardGrabber
+from xkeyboard import KeyboardGrabber, keysym_to_str
 from Xlib import XK
 from operator import or_
 from collections import namedtuple
@@ -132,16 +132,37 @@ class KeyboardChorder(object):
         self.last_time = time
         self.update_display()
         return True
-
     def on_repeat(self, *a):
         pass # (:
 
     def on_keymap_change(self):
         self.configure()
 
+    def press_to_str(self, press):
+        sym, code, state = press[:3]
+        if sym is None:
+            sym = self.im.get_keyval(code, state)
+        desc = keysym_to_str(sym)
+        if state & CTRL:
+            desc = 'C-'+desc
+        return desc
+
+    def seq_to_str(self, seq):
+        return ''.join(self.press_to_str(p) for p in seq)
+
     def update_display(self):
-        if self.down:
-            self.im.show_preedit('{} {}'.format(len(self.down),len(self.seq)))
+        if set(self.down) - self.dead:
+            d, chord = self.get_chord(self.last_time,0)
+            print self.seq, chord
+            if not d:
+                disp = self.seq_to_str(self.seq)
+            elif isinstance(chord, basestring):
+                disp = chord
+            elif isinstance(chord, list):
+                disp = self.seq_to_str(chord)
+            else:
+                disp = 'X'
+            self.im.show_preedit(disp)
         else:
             self.im.show_preedit('')
 

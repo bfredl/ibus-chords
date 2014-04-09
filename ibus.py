@@ -122,6 +122,10 @@ class BaseEngine(IBus.Engine):
         self.__preedit_string = ""
         self.__update()
 
+    def get_keyval(self, keycode, state):
+            ok, keyval, _, _, _ = self.keymap.translate_keyboard_state(keycode, Gdk.ModifierType(state), 0)
+            return keyval
+
     def fake_stroke(self, keyval, keycode, state):
         if keyval is None:
             ok, keyval, _, _, _ = self.keymap.translate_keyboard_state(keycode, Gdk.ModifierType(state), 0)

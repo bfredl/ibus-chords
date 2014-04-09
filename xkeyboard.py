@@ -1,3 +1,4 @@
+# encoding: utf8
 from __future__ import print_function
 from Xlib import X,XK
 import xcb, xcb.xproto as xproto 
@@ -24,6 +25,18 @@ def char_to_keysym(ch):
     if islatin(usc):
         return ucs
     return 0#FIXME
+
+desc_table = {
+        XK.XK_Return: u'↩',
+        XK.XK_BackSpace: u'←'
+        }
+# illustrate keysym
+def keysym_to_str(sym):
+    if sym in desc_table:
+        return desc_table[sym]
+    elif islatin(sym):
+        return chr(sym)
+    return str(sym) #FIXME
 
 def str_to_keysym(string):
     sym = XK.string_to_keysym(string)
