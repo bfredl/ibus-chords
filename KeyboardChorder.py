@@ -4,6 +4,7 @@ from Xlib import XK
 from operator import or_
 from collections import namedtuple
 import os.path as path
+import time
 
 SHIFT = 0x01
 CTRL = 0x04
@@ -46,6 +47,7 @@ class KeyboardChorder(object):
         self.holdThreshold2 = conf.holdThreshold2
         self.chordTreshold = conf.chordTreshold
         self.modThreshold = conf.modThreshold
+        self.dispEagerness = 50
 
         def code_s(s):
             if s == 'HOLD': return s
@@ -112,7 +114,8 @@ class KeyboardChorder(object):
             res = []
             dead = ()
         else:
-            dead, res = self.get_chord(time,keycode)
+            hold = time - self.last_time >= self.holdThreshold
+            dead, res = self.get_chord(time,keycode,hold)
             if not dead:
                 #TODO: maybe latch 'sequential mode'?
                 dead = self.down.keys()
@@ -151,11 +154,16 @@ class KeyboardChorder(object):
         return ''.join(self.press_to_str(p) for p in seq)
 
     def update_display(self):
+        t = time.time()*1000 + self.dispEagerness
         if set(self.down) - self.dead:
-            d, chord = self.get_chord(self.last_time,0)
+            wait = (self.last_time + self.holdThreshold) - t
+            d, chord = self.get_chord(self.last_time,0,wait<=0)
             print self.seq, chord
             if not d:
-                disp = self.seq_to_str(self.seq)
+                if len(self.seq) <= 1:
+                    disp = ''
+                else:
+                    disp = self.seq_to_str(self.seq)
             elif isinstance(chord, basestring):
                 disp = chord
             elif isinstance(chord, list):
@@ -163,21 +171,21 @@ class KeyboardChorder(object):
             else:
                 disp = 'X'
             self.im.show_preedit(disp)
+            if wait > 0:
+                self.im.schedule(wait+1,self.update_display)
         else:
             self.im.show_preedit('')
 
-    #FIXME: return actions instead for OSD preview
-    def get_chord(self,time,keycode):
+    def get_chord(self,time,keycode,hold):
         nochord = ((), [])
         n = len(self.down)
         times = sorted( p.time for p in self.down.values())
         chord = tuple(sorted([ p.keycode for p in self.down.values()]))
         modders = set(chord) &  self.modmap.viewkeys()
-        hold = time - self.last_time >= self.holdThreshold
         if len(self.dead) == 0:
             if n == 1 and not hold:
                 return nochord
-                    
+
             # risk of conflict with slightly overlapping sequence
             if n == 2 and not hold:
                 hold2 = time - times[-2] >= self.holdThreshold2

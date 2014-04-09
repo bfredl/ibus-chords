@@ -23,9 +23,7 @@
 from __future__ import print_function
 
 from gi.repository import IBus
-from gi.repository import GLib
-from gi.repository import GObject
-from gi.repository import Gdk
+from gi.repository import GLib, GObject, Gdk
 
 import os
 import sys
@@ -164,6 +162,8 @@ class BaseEngine(IBus.Engine):
         pairs.sort(key=lambda x: x[1])
         return pairs
 
+    def schedule(self,msecs, callback):
+        GLib.timeout_add(msecs, callback)
 
     def do_focus_in(self):
         print("focus_in")
