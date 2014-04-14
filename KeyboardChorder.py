@@ -101,7 +101,7 @@ class KeyboardChorder(object):
         else:
             self.dead.add(keycode)
         self.last_time = time
-        self.update_display()
+        self.im.schedule(0,self.update_display)
         if dbg:
             print '+', self.psym(keyval), time-self.seq_time
         return not self.seq_d
@@ -133,7 +133,7 @@ class KeyboardChorder(object):
             for p in res:
                 self.im.fake_stroke(*p[:3])
         self.last_time = time
-        self.update_display()
+        self.im.schedule(0,self.update_display)
         return True
     def on_repeat(self, *a):
         pass # (:
@@ -158,7 +158,7 @@ class KeyboardChorder(object):
         if set(self.down) - self.dead:
             wait = (self.last_time + self.holdThreshold) - t
             d, chord = self.get_chord(self.last_time,0,wait<=0)
-            print self.seq, chord
+            print self.seq, repr(chord)
             if not d:
                 if len(self.seq) <= 1:
                     disp = ''

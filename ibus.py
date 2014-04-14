@@ -1,8 +1,7 @@
 #!/usr/bin/env python2
 # encoding: utf8
-# vim:set et sts=4 sw=4:
-# ibus-tmpl - The Input Bus template project
-#
+
+# Based on ibus-tmpl - The Input Bus template project, which is
 # Copyright (c) 2007-2014 Peng Huang <shawn.p.huang@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
