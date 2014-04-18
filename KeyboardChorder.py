@@ -160,7 +160,7 @@ class KeyboardChorder(object):
             d, chord = self.get_chord(self.last_time,0,wait<=0)
             print self.seq, repr(chord)
             if not d:
-                if len(self.seq) <= 1:
+                if len(self.seq) <= 0:
                     disp = ''
                 else:
                     disp = self.seq_to_str(self.seq)

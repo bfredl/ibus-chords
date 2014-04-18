@@ -146,8 +146,10 @@ class BaseEngine(IBus.Engine):
         text = IBus.Text.new_from_string(self.__preedit_string)
         text.set_attributes(attrs)
         #This is broken in latest Gvim (normal mode interprets preedit as commands => epic chaos)
-        #self.update_preedit_text_with_mode(text, preedit_len, preedit_len > 0, IBus.PreeditFocusMode.CLEAR)
-        self.update_auxiliary_text(text, preedit_len > 0)
+        if self.vimfix:
+            self.update_auxiliary_text(text, preedit_len > 0)
+        else:
+            self.update_preedit_text_with_mode(text, preedit_len, preedit_len > 0, IBus.PreeditFocusMode.CLEAR)
         self.__is_invalidate = False
 
     def lookup_keysym(self,keyval):
@@ -166,6 +168,8 @@ class BaseEngine(IBus.Engine):
 
     def do_focus_in(self):
         print("focus_in")
+        #TODO: unbreak gvim instead
+        self.vimfix = (os.system("xprop -id `xdotool getwindowfocus` WM_CLASS|grep Gvim > /dev/null") == 0)
         self.register_properties(self.__prop_list)
         self.initialize()
 
