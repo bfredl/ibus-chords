@@ -83,7 +83,7 @@ class KeyboardChorder(object):
         pass
 
     def on_new_sequence(self, keyval, keycode, state, time):
-        if keycode in self.ignore or (state & 4):
+        if keycode in self.ignore:
             return False 
         self.seq = []
         self.down = {}
