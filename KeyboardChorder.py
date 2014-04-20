@@ -35,7 +35,10 @@ class KeyboardChorder(object):
     def configure(self):
         #FIXME: place these in a class w defaults
         def Sym(s):
-            return [(None,)+self.im.lookup_keysym(s)[0]]
+            keysym = XK.string_to_keysym(s)
+            keycode, keyval = self.im.lookup_keysym(keysym)[0]
+            return Press(keysym, keycode, keyval, 0)
+
         conf = SimpleNamespace(
             pause=self.pause,
             conf=self.configure,
@@ -61,15 +64,20 @@ class KeyboardChorder(object):
         self.unshifted = {}
         for k in range(8,255):
             sym = self.im.get_keyval(k,0)
-            if islatin(sym):
+            if islatin(sym): #FIXME: discrimination against non-latin-1 script :(
                 self.unshifted[k] = chr(sym)
 
         self.remap = {}
         # FIXME: split Shift pairs and modes HERE
         for desc, val in conf.chords.items():
-            chord = []
-            for ch in desc:
-                chord.append(code_s(ch))
+            if isinstance(desc, basestring):
+                chord = []
+                for ch in desc:
+                    chord.append(code_s(ch))
+            elif isinstance(desc, Press):
+                print desc
+                chord = (desc.keycode,)
+
             self.remap[tuple(sorted(chord))] = val 
         print self.remap
 
@@ -149,18 +157,39 @@ class KeyboardChorder(object):
         self.seq = [p for p in self.seq if p.keycode not in dead]
         del self.down[keycode]
         if res: self.im.show_preedit('')
-        if callable(res):
-            res()
-        elif isinstance(res, basestring):
-            self.im.commit_string(res)
-        else:
-            for p in res:
-                self.im.fake_stroke(*p[:3])
+        self.activate(res)
         self.last_time = time
         self.im.schedule(0,self.update_display)
         return True
     def on_repeat(self, *a):
         pass # (:
+
+    def activate(self, seq):
+        if callable(seq):
+            seq()
+        elif isinstance(seq, basestring):
+            self.im.commit_string(seq)
+        elif isinstance(seq, Press):
+            self.im.fake_stroke(*seq[:3])
+        else:
+            for p in seq:
+                self.activate(p)
+
+    def display(self, seq):
+        if isinstance(seq, basestring):
+            return seq
+        elif isinstance(seq, list):
+            return ''.join(self.display(p) for p in seq)
+        elif isinstance(seq, Press):
+            sym, code, state = seq[:3]
+            if sym is None:
+                sym = self.im.get_keyval(code, state)
+            desc = keysym_to_str(sym)
+            if state & CTRL:
+                desc = 'C-'+desc
+            return desc
+        else:
+            return 'X'
 
     def on_keymap_change(self):
         self.configure()
@@ -172,35 +201,14 @@ class KeyboardChorder(object):
             elif keyval == ord('i'):
                 self.command_mode = False
 
-    def press_to_str(self, press):
-        sym, code, state = press[:3]
-        if sym is None:
-            sym = self.im.get_keyval(code, state)
-        desc = keysym_to_str(sym)
-        if state & CTRL:
-            desc = 'C-'+desc
-        return desc
-
-    def seq_to_str(self, seq):
-        return ''.join(self.press_to_str(p) for p in seq)
-
     def update_display(self):
         t = time.time()*1000 + self.dispEagerness
         if set(self.down) - self.dead:
             wait = (self.last_time + self.holdThreshold) - t
             d, chord = self.get_chord(self.last_time,0,wait<=0)
+            if not d: chord = self.seq
             print self.seq, repr(chord)
-            if not d:
-                if len(self.seq) <= 0:
-                    disp = ''
-                else:
-                    disp = self.seq_to_str(self.seq)
-            elif isinstance(chord, basestring):
-                disp = chord
-            elif isinstance(chord, list):
-                disp = self.seq_to_str(chord)
-            else:
-                disp = 'X'
+            disp = self.display(chord)
             self.im.show_preedit(disp)
             if wait > 0:
                 self.im.schedule(wait+1,self.update_display)
@@ -214,9 +222,6 @@ class KeyboardChorder(object):
         chord = tuple(sorted([ p.keycode for p in self.down.values()]))
         modders = set(chord) &  self.modmap.viewkeys()
         if len(self.dead) == 0:
-            if n == 1 and not hold:
-                return nochord
-
             # risk of conflict with slightly overlapping sequence
             if n == 2 and not hold:
                 hold2 = time - times[-2] >= self.holdThreshold2
@@ -245,13 +250,13 @@ class KeyboardChorder(object):
             modseq = []
             for p in self.seq:
                 if p.keycode not in modders:
-                    modseq.append((None,p.keycode,state))
+                    modseq.append(Press(None,p.keycode,state,0))
             if modseq:
                 return chord, modseq
 
-        if len(chord) == 1:
+        if len(chord) == 1 and hold:
             keycode, = chord
-            return chord, [(None,keycode,self.modmap['HOLD'])]
+            return chord, [Press(None,keycode,self.modmap['HOLD'],0)]
         if len(chord) == 2 and self.command_mode:
             prefix  = '÷÷' if hold else '××'
             try:
