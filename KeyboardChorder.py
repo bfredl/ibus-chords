@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from xkeyboard import KeyboardGrabber, keysym_to_str
+from xkeyboard import KeyboardGrabber, keysym_to_str, islatin
 from Xlib import XK
 from operator import or_
 from collections import namedtuple
@@ -23,11 +23,14 @@ class SimpleNamespace:
 
 Press = namedtuple('Press', ['keyval','keycode','state','time'])
 Shift = namedtuple('Shift', ['base', 'hold'])
+Ins = namedtuple('Ins', ['txt'])
+MAGIC = 512
 class KeyboardChorder(object):
     def __init__(self, im):
         self.im = im
         self.conf_file = path.expanduser('~/.config/chords')
         self.configure()
+        self.on_reset()
 
     def configure(self):
         #FIXME: place these in a class w defaults
@@ -36,8 +39,10 @@ class KeyboardChorder(object):
         conf = SimpleNamespace(
             pause=self.pause,
             conf=self.configure,
+            switch=self.toggle_mode,
             Shift=Shift,
             Sym=Sym,
+            Ins=Ins,
             SHIFT=0x01,
             CTRL=0x04,
             LEVEL3=0x80,
@@ -53,8 +58,14 @@ class KeyboardChorder(object):
             if s == 'HOLD': return s
             syms = self.im.lookup_keysym(s)
             return syms[0][0] if syms else s
+        self.unshifted = {}
+        for k in range(8,255):
+            sym = self.im.get_keyval(k,0)
+            if islatin(sym):
+                self.unshifted[k] = chr(sym)
 
         self.remap = {}
+        # FIXME: split Shift pairs and modes HERE
         for desc, val in conf.chords.items():
             chord = []
             for ch in desc:
@@ -66,6 +77,10 @@ class KeyboardChorder(object):
         self.ignore = { code_s(s) for s in conf.ignore}
         self.ignore.add(108)
         self.ch_char  = conf.ch_char
+        self.chordorder = conf.chordorder
+
+    def on_reset(self):
+        self.command_mode = False
 
     def psym(self,val):
         if 0x20 <= val < 0x80 or 0xa0 <= val < 0x0100:
@@ -82,6 +97,10 @@ class KeyboardChorder(object):
     def pause(self):
         pass
 
+    def toggle_mode(self):
+        # HACK: generalize to n diffrent modes
+        self.command_mode = not self.command_mode
+
     def on_new_sequence(self, keyval, keycode, state, time):
         if keycode in self.ignore:
             return False 
@@ -94,6 +113,9 @@ class KeyboardChorder(object):
         return True
 
     def on_press(self, keyval, keycode, state, time, pressed):
+        if keycode >= MAGIC:
+            self.on_magic(keyval,keycode-MAGIC)
+            return True
         p = Press(keyval, keycode, state, time)
         self.down[keycode] = p
         if not self.seq_d:
@@ -107,6 +129,8 @@ class KeyboardChorder(object):
         return not self.seq_d
 
     def on_release(self, keyval, keycode,state,time,pressed):
+        if keycode >= MAGIC:
+            return True
         if dbg:
             print '-', self.psym(keyval), time-self.seq_time
         if keycode in self.dead:
@@ -140,6 +164,13 @@ class KeyboardChorder(object):
 
     def on_keymap_change(self):
         self.configure()
+
+    def on_magic(self, code, keyval):
+        if code == 0:
+            if keyval == ord('n'):
+                self.command_mode = True
+            elif keyval == ord('i'):
+                self.command_mode = False
 
     def press_to_str(self, press):
         sym, code, state = press[:3]
@@ -199,11 +230,15 @@ class KeyboardChorder(object):
                         return nochord
 
         #keysym = self.im.keycode_to_keysym(keycode,0) #[sic]
-        if chord in self.remap:
-            seq = self.remap[chord]
-            if isinstance(seq, Shift):
-                seq = seq.hold if hold else seq.base
-            return chord, seq
+        seq = self.remap.get(chord,None)
+        if isinstance(seq, Shift):
+            seq = seq.hold if hold else seq.base
+        if isinstance(seq, Ins):
+            if self.command_mode:
+                seq = None
+            else:
+                seq = seq.txt
+        if seq is not None: return chord, seq
 
         state = reduce(or_, (self.modmap[k] for k in modders),0)
         if modders:
@@ -217,10 +252,17 @@ class KeyboardChorder(object):
         if len(chord) == 1:
             keycode, = chord
             return chord, [(None,keycode,self.modmap['HOLD'])]
-        else:
+        if len(chord) == 2 and self.command_mode:
+            prefix  = '÷÷' if hold else '××'
+            try:
+                desc = [self.unshifted[c] for c in chord]
+            except KeyError:
+                return nochord
+            desc = ''.join(sorted(desc,key=self.chordorder.find))
+
             #FIXME; RETHINK
-            print('FAULT')
-            return nochord
+            return chord, prefix+desc
+        return nochord
 
 if __name__ == "__main__":
     import time

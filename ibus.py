@@ -54,7 +54,7 @@ class BaseEngine(IBus.Engine):
         self.initialize()
         self.__lookup_table = IBus.LookupTable.new(10, 0, True, True)
         self.__prop_list = IBus.PropList()
-        self.__prop_list.append(IBus.Property(key="test", icon="ibus-local"))
+        self.__prop_list.append(IBus.Property(key="command-mode", icon="ibus-local"))
         #override this in subclass
         self.target = Test(self)
         self.keymap = Gdk.Keymap.get_default()
@@ -172,15 +172,19 @@ class BaseEngine(IBus.Engine):
         self.vimfix = (os.system("xprop -id `xdotool getwindowfocus` WM_CLASS|grep Gvim > /dev/null") == 0)
         self.register_properties(self.__prop_list)
         self.initialize()
+        self.target.on_reset() #maybe distinguish these?
 
     def do_focus_out(self):
         print("focus_out")
 
     def do_reset(self):
         print("reset")
+        self.target.on_reset()
 
-    def do_property_activate(self, prop_name):
+    def do_property_activate(self, prop_name, state):
         print("PropertyActivate(%s)" % prop_name)
+        if prop_name == "command-mode":
+            pass
 
 class ChordEngine(BaseEngine):
     __gtype_name__ = 'ChordEngine'
