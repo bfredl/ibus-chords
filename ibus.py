@@ -29,10 +29,8 @@ import sys
 import getopt
 import locale
 import time
-from xkeyboard import islatin, str_to_keysym
 
-keysyms = IBus
-
+from keysym import desc_to_keysym, keysym_desc
 IDLE = 0
 GRABBED = 1
 PASS_THRU = 2
@@ -154,7 +152,7 @@ class BaseEngine(IBus.Engine):
 
     def lookup_keysym(self,keyval):
         if isinstance(keyval,basestring):
-            keyval,ks = str_to_keysym(keyval), keyval
+            keyval,ks = desc_to_keysym(keyval), keyval
             if keyval == 0:
                 raise KeyError(ks)
         ok, res = self.keymap.get_entries_for_keyval(keyval)

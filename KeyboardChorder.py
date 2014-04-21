@@ -1,10 +1,17 @@
 # -*- coding: utf-8 -*-
-from xkeyboard import KeyboardGrabber, keysym_to_str, islatin
-from Xlib import XK
 from operator import or_
 from collections import namedtuple
 import os.path as path
 import time
+from keysym import desc_to_keysym, keysym_desc
+
+desc_table = {
+        'Return': u'↩',
+        'BackSpace': u'←',
+        # FIXME: these from the modmap
+        'Control_L': u'C-',
+        'Escape': u'M-',
+        }
 
 SHIFT = 0x01
 CTRL = 0x04
@@ -35,7 +42,7 @@ class KeyboardChorder(object):
     def configure(self):
         #FIXME: place these in a class w defaults
         def Sym(s):
-            keysym = XK.string_to_keysym(s)
+            keysym = desc_to_keysym(s)
             keycode, keyval = self.im.lookup_keysym(keysym)[0]
             return Press(keysym, keycode, keyval, 0)
 
@@ -64,8 +71,9 @@ class KeyboardChorder(object):
         self.unshifted = {}
         for k in range(8,255):
             sym = self.im.get_keyval(k,0)
-            if islatin(sym): #FIXME: discrimination against non-latin-1 script :(
-                self.unshifted[k] = chr(sym)
+            special, string = keysym_desc(sym)
+            if not special:
+                self.unshifted[k] = string
 
         self.remap = {}
         # FIXME: split Shift pairs and modes HERE
@@ -83,7 +91,6 @@ class KeyboardChorder(object):
 
         self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.iteritems()}
         self.ignore = { code_s(s) for s in conf.ignore}
-        self.ignore.add(108)
         self.ch_char  = conf.ch_char
         self.chordorder = conf.chordorder
 
@@ -184,7 +191,7 @@ class KeyboardChorder(object):
             sym, code, state = seq[:3]
             if sym is None:
                 sym = self.im.get_keyval(code, state)
-            desc = keysym_to_str(sym)
+            kind, desc = keysym_desc(sym)
             if state & CTRL:
                 desc = 'C-'+desc
             return desc
