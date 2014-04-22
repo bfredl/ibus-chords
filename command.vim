@@ -20,3 +20,10 @@ EOT
 function! Kc_set_mode(mode)
     python kc_set_mode(vim.eval('a:mode'))
 endfunction
+
+augroup KCCommand
+    au!
+    au VimEnter * call Kc_set_mode('n')
+    au InsertEnter * call Kc_set_mode('i')
+    au InsertLeave * call Kc_set_mode('n')
+augroup END
