@@ -31,6 +31,7 @@ class SimpleNamespace:
 Press = namedtuple('Press', ['keyval','keycode','state','time'])
 Shift = namedtuple('Shift', ['base', 'hold'])
 Ins = namedtuple('Ins', ['txt'])
+Command = namedtuple('Command', ['cmd', 'hold'])
 MAGIC = 512
 class KeyboardChorder(object):
     def __init__(self, im):
@@ -71,8 +72,8 @@ class KeyboardChorder(object):
         self.unshifted = {}
         for k in range(8,255):
             sym = self.im.get_keyval(k,0)
-            special, string = keysym_desc(sym)
-            if not special:
+            istext, string = keysym_desc(sym)
+            if istext:
                 self.unshifted[k] = string
 
         self.remap = {}
@@ -88,6 +89,7 @@ class KeyboardChorder(object):
 
             self.remap[tuple(sorted(chord))] = val 
         print self.remap
+        print self.unshifted
 
         self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.iteritems()}
         self.ignore = { code_s(s) for s in conf.ignore}
@@ -178,6 +180,9 @@ class KeyboardChorder(object):
             self.im.commit_string(seq)
         elif isinstance(seq, Press):
             self.im.fake_stroke(*seq[:3])
+        elif isinstance(seq, Command):
+            prefix  = '÷÷' if seq.hold else '××'
+            self.im.commit_string(prefix+seq.cmd)
         else:
             for p in seq:
                 self.activate(p)
@@ -191,21 +196,27 @@ class KeyboardChorder(object):
             sym, code, state = seq[:3]
             if sym is None:
                 sym = self.im.get_keyval(code, state)
-            kind, desc = keysym_desc(sym)
+            istext, desc = keysym_desc(sym)
             if state & CTRL:
                 desc = 'C-'+desc
             return desc
+        elif isinstance(seq, Command):
+            if seq.hold:
+                return '<'+seq.cmd.upper()+'>'
+            else:
+                return '['+seq.cmd+']'
         else:
             return 'X'
 
     def on_keymap_change(self):
         self.configure()
 
-    def on_magic(self, code, keyval):
+    def on_magic(self, keyval, code):
+        print('magic', keyval, code)
         if code == 0:
-            if keyval == ord('n'):
+            if keyval in (ord('n'), ord('N')):
                 self.command_mode = True
-            elif keyval == ord('i'):
+            elif keyval in (ord('i'), ord('I')):
                 self.command_mode = False
 
     def update_display(self):
@@ -265,15 +276,13 @@ class KeyboardChorder(object):
             keycode, = chord
             return chord, [Press(None,keycode,self.modmap['HOLD'],0)]
         if len(chord) == 2 and self.command_mode:
-            prefix  = '÷÷' if hold else '××'
             try:
-                desc = [self.unshifted[c] for c in chord]
+                txt = [self.unshifted[c] for c in chord]
             except KeyError:
                 return nochord
-            desc = ''.join(sorted(desc,key=self.chordorder.find))
+            txt = ''.join(sorted(txt,key=self.chordorder.find))
 
-            #FIXME; RETHINK
-            return chord, prefix+desc
+            return chord, Command(txt,hold)
         return nochord
 
 if __name__ == "__main__":

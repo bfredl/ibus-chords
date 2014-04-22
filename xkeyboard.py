@@ -26,15 +26,6 @@ def char_to_keysym(ch):
         return ucs
     return 0#FIXME
 
-desc_table = {
-        # some problems with this one
-        #XK.XK_Return: u'↩',
-        XK.XK_Return: u'',
-        XK.XK_BackSpace: u'←',
-        # FIXME: these from the modmap
-        XK.XK_Control_L: u'C-',
-        XK.XK_Escape: u'M-',
-        }
 # illustrate keysym
 def keysym_to_str(sym):
     if sym in desc_table:
