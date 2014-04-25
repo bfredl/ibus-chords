@@ -165,18 +165,19 @@ class BaseEngine(IBus.Engine):
         GLib.timeout_add(msecs, callback)
 
     def do_focus_in(self):
-        print("focus_in")
+        self.target.on_reset() #maybe distinguish these?
         #TODO: unbreak gvim instead
+        os.system("xprop -id `xdotool getwindowfocus` WM_CLASS")
         self.vimfix = (os.system("xprop -id `xdotool getwindowfocus` WM_CLASS|grep Gvim > /dev/null") == 0)
+        chfix = os.system("xprop -id `xdotool getwindowfocus` WM_CLASS|grep chromium > /dev/null") == 0
+        self.target.set_quiet(chfix)
         self.register_properties(self.__prop_list)
         self.initialize()
-        self.target.on_reset() #maybe distinguish these?
 
     def do_focus_out(self):
-        print("focus_out")
+        pass
 
     def do_reset(self):
-        print("reset")
         self.target.on_reset()
 
     def do_property_activate(self, prop_name, state):

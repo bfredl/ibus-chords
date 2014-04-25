@@ -7,7 +7,7 @@ from keysym import desc_to_keysym, keysym_desc
 
 desc_table = {
         'Return': u'↩',
-        'BackSpace': u'←',
+        'BackSpace': u'◄',
         # FIXME: these from the modmap
         'Control_L': u'C-',
         'Escape': u'M-',
@@ -99,6 +99,9 @@ class KeyboardChorder(object):
     def on_reset(self):
         self.command_mode = False
 
+    def set_quiet(self, val):
+        self.quiet = val
+
     def psym(self,val):
         if 0x20 <= val < 0x80 or 0xa0 <= val < 0x0100:
             return chr(val)
@@ -187,16 +190,19 @@ class KeyboardChorder(object):
             for p in seq:
                 self.activate(p)
 
-    def display(self, seq):
+    def display(self, seq,quiet=False):
         if isinstance(seq, basestring):
             return seq
         elif isinstance(seq, list):
-            return ''.join(self.display(p) for p in seq)
+            return ''.join(self.display(p,quiet) for p in seq)
         elif isinstance(seq, Press):
             sym, code, state = seq[:3]
             if sym is None:
                 sym = self.im.get_keyval(code, state)
             istext, desc = keysym_desc(sym)
+            if quiet and not istext:
+                return ''
+            desc = desc_table.get(desc,desc)
             if state & CTRL:
                 desc = 'C-'+desc
             return desc
@@ -220,13 +226,19 @@ class KeyboardChorder(object):
                 self.command_mode = False
 
     def update_display(self):
-        t = time.time()*1000 + self.dispEagerness
+        print self.quiet
+        t = time.time()*1000
+        tlast = t- self.last_time 
+        if self.quiet and t - self.seq_time < 50:
+            self.im.schedule(50+1,self.update_display)
+            self.im.show_preedit('')
+            return
         if set(self.down) - self.dead:
-            wait = (self.last_time + self.holdThreshold) - t
+            wait = (self.holdThreshold - self.dispEagerness) - tlast
             d, chord = self.get_chord(self.last_time,0,wait<=0)
             if not d: chord = self.seq
             print self.seq, repr(chord)
-            disp = self.display(chord)
+            disp = self.display(chord,self.quiet)
             self.im.show_preedit(disp)
             if wait > 0:
                 self.im.schedule(wait+1,self.update_display)
