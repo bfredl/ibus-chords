@@ -1,12 +1,11 @@
-  python << EOT
+python << EOT
 import vim
-import ibus
+from gi.repository import IBus
 def kc_ic_get():
-    from dbus.exceptions import DBusException
-    bus = ibus.Bus()
+    bus = IBus.Bus()
     try:
-        return ibus.InputContext(bus, bus.current_input_contxt())
-    except DBusException:
+        return IBus.InputContext.get_input_context(bus.current_input_context(),bus.get_connection())
+    except KeyError: #FIXME: correct error
         return None
 
 def kc_set_mode(mode):
@@ -26,4 +25,6 @@ augroup KCCommand
     au VimEnter * call Kc_set_mode('n')
     au InsertEnter * call Kc_set_mode('i')
     au InsertLeave * call Kc_set_mode('n')
+    " rest of the word = insert mode :)
+    au VimLeave * call Kc_set_mode('i')
 augroup END
