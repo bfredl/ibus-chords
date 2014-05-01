@@ -25,6 +25,5 @@ augroup KCCommand
     au VimEnter * call Kc_set_mode('n')
     au InsertEnter * call Kc_set_mode('i')
     au InsertLeave * call Kc_set_mode('n')
-    " rest of the word = insert mode :)
-    au VimLeave * call Kc_set_mode('i')
+    au VimLeave * call Kc_set_mode('e')
 augroup END

@@ -97,7 +97,7 @@ class KeyboardChorder(object):
         self.chordorder = conf.chordorder
 
     def on_reset(self):
-        self.command_mode = False
+        self.mode = ''
 
     def set_quiet(self, val):
         self.quiet = val
@@ -119,7 +119,7 @@ class KeyboardChorder(object):
 
     def toggle_mode(self):
         # HACK: generalize to n diffrent modes
-        self.command_mode = not self.command_mode
+        self.mode = '' if self.mode else 'n'
 
     def on_new_sequence(self, keyval, keycode, state, time):
         if keycode in self.ignore:
@@ -220,10 +220,10 @@ class KeyboardChorder(object):
     def on_magic(self, keyval, code):
         print('magic', keyval, code)
         if code == 0:
-            if keyval in (ord('n'), ord('N')):
-                self.command_mode = True
-            elif keyval in (ord('i'), ord('I')):
-                self.command_mode = False
+            if keyval in range(ord('a'), ord('z')):
+                self.mode = chr(keyval)
+            if keyval in range(ord('A'), ord('Z')):
+                self.mode = chr(keyval).lower()
 
     def update_display(self):
         print self.quiet
@@ -269,7 +269,7 @@ class KeyboardChorder(object):
         if isinstance(seq, Shift):
             seq = seq.hold if hold else seq.base
         if isinstance(seq, Ins):
-            if self.command_mode:
+            if self.mode == 'n':
                 seq = None
             else:
                 seq = seq.txt
@@ -287,7 +287,7 @@ class KeyboardChorder(object):
         if len(chord) == 1 and hold:
             keycode, = chord
             return chord, [Press(None,keycode,self.modmap['HOLD'],0)]
-        if len(chord) == 2 and self.command_mode:
+        if len(chord) == 2 and self.mode != '':
             try:
                 txt = [self.unshifted[c] for c in chord]
             except KeyError:
