@@ -95,7 +95,8 @@ class KeyboardChorder(object):
                 chord = (desc.keycode,)
 
             if isinstance(val, Shift):
-                self.remap[chord] = val.base
+                if val.base is not None:
+                    self.remap[chord] = val.base
                 self.remap[(HOLD,)+chord] = val.hold
             else:
                 self.remap[chord] = val
@@ -284,8 +285,11 @@ class KeyboardChorder(object):
                 seq = seq.txt
         if seq is not None: return seq
 
-        state = reduce(or_, (self.modmap[k] for k in modders),0)
         if modders:
+            if len(chord) == len(modders) and HOLD in chord:
+                #FIXME: special case
+                modders = { HOLD }
+            state = reduce(or_, (self.modmap[k] for k in modders),0)
             modseq = []
             for p in self.seq:
                 if p.keycode not in modders:
