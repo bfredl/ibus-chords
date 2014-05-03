@@ -10,12 +10,19 @@ desc_table = {
         'BackSpace': u'◄',
         # FIXME: these from the modmap
         'Control_L': u'C-',
-        'Escape': u'M-',
+        'Escape': u'ESC',
+        'Left': '',
+        'Right': '',
+        'Up': '',
+        'Down': '',
         }
 
 SHIFT = 0x01
 CTRL = 0x04
+ALT = 0x08
 LEVEL3 = 0x80
+HOLD = -1
+
 
 dbg = True
 class SimpleNamespace:
@@ -56,6 +63,7 @@ class KeyboardChorder(object):
             Ins=Ins,
             SHIFT=0x01,
             CTRL=0x04,
+            ALT=ALT,
             LEVEL3=0x80,
         )
         execfile(self.conf_file,conf.__dict__)
@@ -66,7 +74,7 @@ class KeyboardChorder(object):
         self.dispEagerness = 50
 
         def code_s(s):
-            if s == 'HOLD': return s
+            if s == 'HOLD': return HOLD
             syms = self.im.lookup_keysym(s)
             return syms[0][0] if syms else s
         self.unshifted = {}
@@ -77,17 +85,20 @@ class KeyboardChorder(object):
                 self.unshifted[k] = string
 
         self.remap = {}
-        # FIXME: split Shift pairs and modes HERE
         for desc, val in conf.chords.items():
             if isinstance(desc, basestring):
                 chord = []
                 for ch in desc:
                     chord.append(code_s(ch))
+                chord = tuple(sorted(chord))
             elif isinstance(desc, Press):
-                print desc
                 chord = (desc.keycode,)
 
-            self.remap[tuple(sorted(chord))] = val 
+            if isinstance(val, Shift):
+                self.remap[chord] = val.base
+                self.remap[(HOLD,)+chord] = val.hold
+            else:
+                self.remap[chord] = val
         print self.remap
         print self.unshifted
 
@@ -159,14 +170,12 @@ class KeyboardChorder(object):
             dead = ()
         else:
             hold = time - self.last_time >= self.holdThreshold
-            dead, res = self.get_chord(time,keycode,hold)
-            if not dead:
-                #TODO: maybe latch 'sequential mode'?
-                dead = self.down.keys()
+            res = self.get_chord(time,keycode,hold)
+            if not res:
                 res = list(self.seq)
                 self.seq_d = True
-        self.dead.update([k for k in dead if k != keycode])
-        self.seq = [p for p in self.seq if p.keycode not in dead]
+        self.dead.update([k for k in self.down if k != keycode])
+        self.seq = []
         del self.down[keycode]
         if res: self.im.show_preedit('')
         self.activate(res)
@@ -235,8 +244,8 @@ class KeyboardChorder(object):
             return
         if set(self.down) - self.dead:
             wait = (self.holdThreshold - self.dispEagerness) - tlast
-            d, chord = self.get_chord(self.last_time,0,wait<=0)
-            if not d: chord = self.seq
+            chord = self.get_chord(self.last_time,0,wait<=0)
+            if chord is None: chord = self.seq
             print self.seq, repr(chord)
             disp = self.display(chord,self.quiet)
             self.im.show_preedit(disp)
@@ -246,10 +255,12 @@ class KeyboardChorder(object):
             self.im.show_preedit('')
 
     def get_chord(self,time,keycode,hold):
-        nochord = ((), [])
         n = len(self.down)
         times = sorted( p.time for p in self.down.values())
-        chord = tuple(sorted([ p.keycode for p in self.down.values()]))
+        chord = tuple(sorted([ code for code in self.down.keys()]))
+        basechord = chord
+        if hold:
+            chord = (HOLD,)+chord
         modders = set(chord) &  self.modmap.viewkeys()
         if len(self.dead) == 0:
             # risk of conflict with slightly overlapping sequence
@@ -262,18 +273,16 @@ class KeyboardChorder(object):
                     t0, t1 = times[-2:]
                     t2 = time
                     if t2-t1 < th*(t1-t0):
-                        return nochord
+                        return None
 
         #keysym = self.im.keycode_to_keysym(keycode,0) #[sic]
         seq = self.remap.get(chord,None)
-        if isinstance(seq, Shift):
-            seq = seq.hold if hold else seq.base
         if isinstance(seq, Ins):
             if self.mode == 'n':
                 seq = None
             else:
                 seq = seq.txt
-        if seq is not None: return chord, seq
+        if seq is not None: return seq
 
         state = reduce(or_, (self.modmap[k] for k in modders),0)
         if modders:
@@ -282,20 +291,17 @@ class KeyboardChorder(object):
                 if p.keycode not in modders:
                     modseq.append(Press(None,p.keycode,state,0))
             if modseq:
-                return chord, modseq
+                return modseq
 
-        if len(chord) == 1 and hold:
-            keycode, = chord
-            return chord, [Press(None,keycode,self.modmap['HOLD'],0)]
-        if len(chord) == 2 and self.mode != '':
+        if len(basechord) == 2 and self.mode != '':
             try:
-                txt = [self.unshifted[c] for c in chord]
+                txt = [self.unshifted[c] for c in basechord]
             except KeyError:
-                return nochord
+                return None
             txt = ''.join(sorted(txt,key=self.chordorder.find))
 
-            return chord, Command(txt,hold)
-        return nochord
+            return Command(txt,hold)
+        return None
 
 if __name__ == "__main__":
     import time
