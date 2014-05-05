@@ -46,6 +46,7 @@ class KeyboardChorder(object):
         self.conf_file = path.expanduser('~/.config/chords')
         self.configure()
         self.on_reset()
+        self.quiet = False
 
     def configure(self):
         #FIXME: place these in a class w defaults
@@ -56,6 +57,7 @@ class KeyboardChorder(object):
 
         conf = SimpleNamespace(
             pause=self.pause,
+            quiet=self.set_quiet,
             conf=self.configure,
             switch=self.toggle_mode,
             Shift=Shift,
@@ -111,7 +113,9 @@ class KeyboardChorder(object):
     def on_reset(self):
         self.mode = ''
 
-    def set_quiet(self, val):
+    def set_quiet(self, val=None):
+        if val is None:
+            val = not self.quiet
         self.quiet = val
 
     def psym(self,val):
@@ -165,16 +169,16 @@ class KeyboardChorder(object):
             return True
         if dbg:
             print '-', self.psym(keyval), time-self.seq_time
-        if keycode in self.dead:
-            self.dead.remove(keycode)
-            res = []
-            dead = ()
-        else:
+        print set(self.down.keys()) , self.dead
+        if set(self.down.keys()) - self.dead:
+            print 'x' 
             hold = time - self.last_time >= self.holdThreshold
             res = self.get_chord(time,keycode,hold)
             if not res:
                 res = list(self.seq)
                 self.seq_d = True
+        else:
+            res = []
         self.dead.update([k for k in self.down if k != keycode])
         self.seq = []
         del self.down[keycode]
@@ -214,7 +218,10 @@ class KeyboardChorder(object):
                 return ''
             desc = desc_table.get(desc,desc)
             if state & CTRL:
-                desc = 'C-'+desc
+                if not quiet:
+                    desc = 'C-'+desc
+                else:
+                    return ''
             return desc
         elif isinstance(seq, Command):
             if seq.hold:
@@ -262,7 +269,7 @@ class KeyboardChorder(object):
         basechord = chord
         if hold:
             chord = (HOLD,)+chord
-        modders = set(chord) &  self.modmap.viewkeys()
+        modders = set(basechord) &  self.modmap.viewkeys()
         if len(self.dead) == 0:
             # risk of conflict with slightly overlapping sequence
             if n == 2 and not hold:
@@ -276,7 +283,6 @@ class KeyboardChorder(object):
                     if t2-t1 < th*(t1-t0):
                         return None
 
-        #keysym = self.im.keycode_to_keysym(keycode,0) #[sic]
         seq = self.remap.get(chord,None)
         if isinstance(seq, Ins):
             if self.mode == 'n':
@@ -285,10 +291,8 @@ class KeyboardChorder(object):
                 seq = seq.txt
         if seq is not None: return seq
 
+        statemod = 0
         if modders:
-            if len(chord) == len(modders) and HOLD in chord:
-                #FIXME: special case
-                modders = { HOLD }
             state = reduce(or_, (self.modmap[k] for k in modders),0)
             modseq = []
             for p in self.seq:
@@ -296,6 +300,10 @@ class KeyboardChorder(object):
                     modseq.append(Press(None,p.keycode,state,0))
             if modseq:
                 return modseq
+
+        if len(basechord) == 1 and hold:
+            keycode, = basechord
+            return [Press(None,keycode,self.modmap[HOLD],0)]
 
         if len(basechord) == 2 and self.mode != '':
             try:
