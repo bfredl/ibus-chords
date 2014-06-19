@@ -26,4 +26,5 @@ augroup KCCommand
     au InsertEnter * call Kc_set_mode('i')
     au InsertLeave * call Kc_set_mode('n')
     au VimLeave * call Kc_set_mode('e')
+    au FocusGained * call Kc_set_mode('n')
 augroup END
