@@ -143,6 +143,8 @@ class KeyboardChorder(object):
         self.update_mode()
 
     def set_mode(self, mode):
+        print('mode', mode)
+
         self.mode = mode
         if mode == 'n':
             self.set_keymap("base")
@@ -150,6 +152,7 @@ class KeyboardChorder(object):
             self.set_keymap("insert")
 
     def set_keymap(self, name):
+        print('map', name)
         order = [name]
         n = 0
         while n < len(order):
@@ -258,10 +261,8 @@ class KeyboardChorder(object):
     def on_magic(self, keyval, code):
         print('magic', keyval, code)
         if code == 0:
-            if keyval in range(ord('a'), ord('z')):
-                self.set_mode(chr(keyval))
-            if keyval in range(ord('A'), ord('Z')):
-                self.set_mode(chr(keyval).lower())
+            mode = chr(keyval)
+            self.set_mode(mode)
         elif code == 1:
             self.set_keymap(self.km_abbr.get(chr(keyval),'insert'))
 

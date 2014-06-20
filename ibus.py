@@ -61,6 +61,8 @@ class BaseEngine(IBus.Engine):
         #FIXME: handle this EPIC fail more systematically 
         self.offset = 8
 
+        self.vimfix = False
+
     def initialize(self):
         self.state = IDLE
         self.pressed = set()
@@ -165,20 +167,27 @@ class BaseEngine(IBus.Engine):
         GLib.timeout_add(msecs, callback)
 
     def do_focus_in(self):
-        self.target.on_reset() #maybe distinguish these?
+        print('onfocus')
         #TODO: unbreak gvim instead
         os.system("xprop -id `xdotool getwindowfocus` WM_CLASS")
         self.vimfix = (os.system("xprop -id `xdotool getwindowfocus` WM_CLASS|grep Gvim > /dev/null") == 0)
         chfix = os.system("xprop -id `xdotool getwindowfocus` WM_CLASS|grep chromium > /dev/null") == 0
+        if not self.vimfix:
+            #gvim sometimes emits a TONNE of focus/defocus events
+            #right after entering insert mode; ignore these
+            self.target.on_reset()
         self.target.set_quiet(chfix)
         self.register_properties(self.__prop_list)
         self.initialize()
 
     def do_focus_out(self):
+        print('on unfocus')
         pass
 
     def do_reset(self):
-        self.target.on_reset()
+        print('onreset')
+        if not self.vimfix:
+            self.target.on_reset()
 
     def do_property_activate(self, prop_name, state):
         print("PropertyActivate(%s)" % prop_name)
