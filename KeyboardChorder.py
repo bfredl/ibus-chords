@@ -86,6 +86,7 @@ class KeyboardChorder(object):
             set_keymap=partial(partial,self.set_keymap),
             keymap={},
             parents={},
+            km_abbr={},
             Shift=Shift,
             Sym=Sym,
             SHIFT=0x01,
@@ -109,6 +110,7 @@ class KeyboardChorder(object):
 
         self.keymap = { k:self.translate_keymap(v) for k,v in conf.keymap.items() }
         self.parents = conf.parents
+        self.km_abbr = conf.km_abbr
         print(self.keymap)
         print(self.unshifted)
 
@@ -260,6 +262,8 @@ class KeyboardChorder(object):
                 self.set_mode(chr(keyval))
             if keyval in range(ord('A'), ord('Z')):
                 self.set_mode(chr(keyval).lower())
+        elif code == 1:
+            self.set_keymap(self.km_abbr.get(chr(keyval),'insert'))
 
     def update_display(self):
         t = time.time()*1000
