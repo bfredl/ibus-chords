@@ -41,6 +41,7 @@ class KeyboardChorder(object):
     def __init__(self, im):
         self.im = im
         self.conf_file = path.expanduser('~/.config/chords')
+        self.remap = ChainMap()
         self.configure()
         self.on_reset()
         self.quiet = False
@@ -82,6 +83,7 @@ class KeyboardChorder(object):
             conf=self.configure,
             switch=self.toggle_mode,
             keymap={},
+            parents={},
             Shift=Shift,
             Sym=Sym,
             SHIFT=0x01,
@@ -104,6 +106,7 @@ class KeyboardChorder(object):
                 self.unshifted[k] = string
 
         self.keymap = { k:self.translate_keymap(v) for k,v in conf.keymap.items() }
+        self.parents = conf.parents
         print(self.keymap)
         print(self.unshifted)
 
@@ -114,7 +117,7 @@ class KeyboardChorder(object):
         self.chordorder = conf.chordorder
 
     def on_reset(self):
-        self.mode = ''
+        self.set_mode('')
 
     def set_quiet(self, val=None):
         if val is None:
@@ -138,7 +141,25 @@ class KeyboardChorder(object):
 
     def toggle_mode(self):
         # HACK: generalize to n diffrent modes
-        self.mode = '' if self.mode else 'n'
+        self.set_mode('' if self.mode else 'n')
+        self.update_mode()
+
+    def set_mode(self, mode):
+        self.mode = mode
+        if mode == 'n':
+            self.set_keymap("base")
+        else:
+            self.set_keymap("insert")
+
+    def set_keymap(self, name):
+        order = [name]
+        n = 0
+        while n < len(order):
+            for p in self.parents.get(order[n],[]):
+                if p not in order:
+                    order.append(p)
+            n += 1
+        self.remap.maps = [self.keymap[i] for i in order]
 
     def on_new_sequence(self, keyval, keycode, state, time):
         if keycode in self.ignore:
@@ -240,9 +261,9 @@ class KeyboardChorder(object):
         print('magic', keyval, code)
         if code == 0:
             if keyval in range(ord('a'), ord('z')):
-                self.mode = chr(keyval)
+                self.set_mode(chr(keyval))
             if keyval in range(ord('A'), ord('Z')):
-                self.mode = chr(keyval).lower()
+                self.set_mode(chr(keyval).lower())
 
     def update_display(self):
         t = time.time()*1000
@@ -284,12 +305,10 @@ class KeyboardChorder(object):
                     if t2-t1 < th*(t1-t0):
                         return None
 
-        remap = ChainMap(self.keymap['base'])
-        if self.mode != 'n':
-            remap.maps.insert(0,self.keymap['insert'])
-
-        if chord in remap:
-            return remap[chord]
+        try:
+            return self.remap[chord]
+        except KeyError:
+            pass
 
         statemod = 0
         if modders:
