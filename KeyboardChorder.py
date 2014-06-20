@@ -6,13 +6,16 @@ import os.path as path
 import time
 from keysym import desc_to_keysym, keysym_desc
 import sys
+from functools import reduce
+from types import SimpleNamespace
+
 
 desc_table = {
-        'Return': u'↩',
-        'BackSpace': u'◄',
+        'Return': '↩',
+        'BackSpace': '◄',
         # FIXME: these from the modmap
-        'Control_L': u'C-',
-        'Escape': u'ESC',
+        'Control_L': 'C-',
+        'Escape': 'ESC',
         'Left': '',
         'Right': '',
         'Up': '',
@@ -25,26 +28,10 @@ ALT = 0x08
 LEVEL3 = 0x80
 HOLD = -1
 
-
 dbg = True
-class SimpleNamespace:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-    def __repr__(self):
-        keys = sorted(self.__dict__)
-        items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
-        return "{}({})".format(type(self).__name__, ", ".join(items))
-    def __eq__(self, other):
-        return self.__dict__ == other.__dict__
-
-if sys.version_info[0] >= 3:
-    from functools import reduce
-    basestring = str
-    # taken from IPython's py3compat
-    def execfile(fname, glob, loc=None):
-        loc = loc if (loc is not None) else glob
-        with open(fname, 'rb') as f:
-            exec(compile(f.read(), fname, 'exec'), glob, loc)
+def runfile(fname, glob):
+    with open(fname, 'rb') as f:
+        exec(compile(f.read(), fname, 'exec'), glob, glob)
 
 Press = namedtuple('Press', ['keyval','keycode','state','time'])
 Shift = namedtuple('Shift', ['base', 'hold'])
@@ -79,7 +66,7 @@ class KeyboardChorder(object):
             ALT=ALT,
             LEVEL3=0x80,
         )
-        execfile(self.conf_file,conf.__dict__)
+        runfile(self.conf_file,conf.__dict__)
         self.holdThreshold = conf.holdThreshold
         self.holdThreshold2 = conf.holdThreshold2
         self.chordTreshold = conf.chordTreshold
@@ -99,7 +86,7 @@ class KeyboardChorder(object):
 
         self.remap = {}
         for desc, val in conf.chords.items():
-            if isinstance(desc, basestring):
+            if isinstance(desc, str):
                 chord = []
                 for ch in desc:
                     chord.append(code_s(ch))
@@ -180,8 +167,8 @@ class KeyboardChorder(object):
             return True
         if dbg:
             print('-', self.psym(keyval), time-self.seq_time)
-        print(set(self.down.keys()) , self.dead)
-        if set(self.down.keys()) - self.dead:
+        print(self.down.keys(), self.dead)
+        if self.down.keys() - self.dead:
             hold = time - self.last_time >= self.holdThreshold
             res = self.get_chord(time,keycode,hold)
             if not res:
@@ -203,7 +190,7 @@ class KeyboardChorder(object):
     def activate(self, seq):
         if callable(seq):
             seq()
-        elif isinstance(seq, basestring):
+        elif isinstance(seq, str):
             self.im.commit_string(seq)
         elif isinstance(seq, Press):
             self.im.fake_stroke(*seq[:3])
@@ -215,7 +202,7 @@ class KeyboardChorder(object):
                 self.activate(p)
 
     def display(self, seq,quiet=False):
-        if isinstance(seq, basestring):
+        if isinstance(seq, str):
             return seq
         elif isinstance(seq, list):
             return ''.join(self.display(p,quiet) for p in seq)
@@ -278,7 +265,7 @@ class KeyboardChorder(object):
         basechord = chord
         if hold:
             chord = (HOLD,)+chord
-        modders = set(basechord) &  set(self.modmap.keys())
+        modders = set(basechord) &  self.modmap.keys()
         if len(self.dead) == 0:
             # risk of conflict with slightly overlapping sequence
             if n == 2 and not hold:

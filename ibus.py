@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # encoding: utf8
 
 # Based on ibus-tmpl - The Input Bus template project, which is
@@ -34,9 +34,6 @@ from keysym import desc_to_keysym, keysym_desc
 IDLE = 0
 GRABBED = 1
 PASS_THRU = 2
-
-if sys.version_info[0] >= 3:
-    basestring = str
 
 def set_proc_name(newname):
     from ctypes import cdll, byref, create_string_buffer
@@ -154,7 +151,7 @@ class BaseEngine(IBus.Engine):
         self.__is_invalidate = False
 
     def lookup_keysym(self,keyval):
-        if isinstance(keyval,basestring):
+        if isinstance(keyval,str):
             keyval,ks = desc_to_keysym(keyval), keyval
             if keyval == 0:
                 raise KeyError(ks)
