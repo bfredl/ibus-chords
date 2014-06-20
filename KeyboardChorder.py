@@ -6,7 +6,7 @@ import os.path as path
 import time
 from keysym import desc_to_keysym, keysym_desc
 import sys
-from functools import reduce
+from functools import reduce, partial
 from types import SimpleNamespace
 
 
@@ -82,6 +82,8 @@ class KeyboardChorder(object):
             quiet=self.set_quiet,
             conf=self.configure,
             switch=self.toggle_mode,
+            # Do you even curry?
+            set_keymap=partial(partial,self.set_keymap),
             keymap={},
             parents={},
             Shift=Shift,
@@ -123,12 +125,6 @@ class KeyboardChorder(object):
         if val is None:
             val = not self.quiet
         self.quiet = val
-
-    def psym(self,val):
-        if 0x20 <= val < 0x80 or 0xa0 <= val < 0x0100:
-            return chr(val)
-        else:
-            return val
 
     def run(self):
         try:
@@ -185,14 +181,14 @@ class KeyboardChorder(object):
         self.last_time = time
         self.im.schedule(0,self.update_display)
         if dbg:
-            print('+', self.psym(keyval), time-self.seq_time)
+            print('+', keysym_desc(keyval), time-self.seq_time)
         return not self.seq_d
 
     def on_release(self, keyval, keycode,state,time,pressed):
         if keycode >= MAGIC:
             return True
         if dbg:
-            print('-', self.psym(keyval), time-self.seq_time)
+            print('-', keysym_desc(keyval), time-self.seq_time)
         print(self.down.keys(), self.dead)
         if self.down.keys() - self.dead:
             hold = time - self.last_time >= self.holdThreshold
