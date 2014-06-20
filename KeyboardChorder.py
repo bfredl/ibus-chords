@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
+from __future__ import print_function
 from operator import or_
 from collections import namedtuple
 import os.path as path
 import time
 from keysym import desc_to_keysym, keysym_desc
+import sys
 
 desc_table = {
         'Return': u'↩',
@@ -34,6 +36,15 @@ class SimpleNamespace:
         return "{}({})".format(type(self).__name__, ", ".join(items))
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
+
+if sys.version_info[0] >= 3:
+    from functools import reduce
+    basestring = str
+    # taken from IPython's py3compat
+    def execfile(fname, glob, loc=None):
+        loc = loc if (loc is not None) else glob
+        with open(fname, 'rb') as f:
+            exec(compile(f.read(), fname, 'exec'), glob, loc)
 
 Press = namedtuple('Press', ['keyval','keycode','state','time'])
 Shift = namedtuple('Shift', ['base', 'hold'])
@@ -102,10 +113,10 @@ class KeyboardChorder(object):
                 self.remap[(HOLD,)+chord] = val.hold
             else:
                 self.remap[chord] = val
-        print self.remap
-        print self.unshifted
+        print(self.remap)
+        print(self.unshifted)
 
-        self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.iteritems()}
+        self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.items()}
         self.ignore = { code_s(s) for s in conf.ignore}
         self.ch_char  = conf.ch_char
         self.chordorder = conf.chordorder
@@ -161,17 +172,16 @@ class KeyboardChorder(object):
         self.last_time = time
         self.im.schedule(0,self.update_display)
         if dbg:
-            print '+', self.psym(keyval), time-self.seq_time
+            print('+', self.psym(keyval), time-self.seq_time)
         return not self.seq_d
 
     def on_release(self, keyval, keycode,state,time,pressed):
         if keycode >= MAGIC:
             return True
         if dbg:
-            print '-', self.psym(keyval), time-self.seq_time
-        print set(self.down.keys()) , self.dead
+            print('-', self.psym(keyval), time-self.seq_time)
+        print(set(self.down.keys()) , self.dead)
         if set(self.down.keys()) - self.dead:
-            print 'x' 
             hold = time - self.last_time >= self.holdThreshold
             res = self.get_chord(time,keycode,hold)
             if not res:
@@ -243,7 +253,6 @@ class KeyboardChorder(object):
                 self.mode = chr(keyval).lower()
 
     def update_display(self):
-        print self.quiet
         t = time.time()*1000
         tlast = t- self.last_time 
         if self.quiet and t - self.seq_time < 50:
@@ -254,7 +263,7 @@ class KeyboardChorder(object):
             wait = (self.holdThreshold - self.dispEagerness) - tlast
             chord = self.get_chord(self.last_time,0,wait<=0)
             if chord is None: chord = self.seq
-            print self.seq, repr(chord)
+            print(self.seq, repr(chord))
             disp = self.display(chord,self.quiet)
             self.im.show_preedit(disp)
             if wait > 0:
@@ -269,7 +278,7 @@ class KeyboardChorder(object):
         basechord = chord
         if hold:
             chord = (HOLD,)+chord
-        modders = set(basechord) &  self.modmap.viewkeys()
+        modders = set(basechord) &  set(self.modmap.keys())
         if len(self.dead) == 0:
             # risk of conflict with slightly overlapping sequence
             if n == 2 and not hold:
