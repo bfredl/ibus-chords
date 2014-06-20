@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 from operator import or_
-from collections import namedtuple
+from collections import namedtuple, ChainMap
 import os.path as path
 import time
 from keysym import desc_to_keysym, keysym_desc
@@ -35,7 +35,6 @@ def runfile(fname, glob):
 
 Press = namedtuple('Press', ['keyval','keycode','state','time'])
 Shift = namedtuple('Shift', ['base', 'hold'])
-Ins = namedtuple('Ins', ['txt'])
 Command = namedtuple('Command', ['cmd', 'hold'])
 MAGIC = 512
 class KeyboardChorder(object):
@@ -45,6 +44,30 @@ class KeyboardChorder(object):
         self.configure()
         self.on_reset()
         self.quiet = False
+
+    def lookup_keysym(self, s):
+        if s == 'HOLD': return HOLD
+        syms = self.im.lookup_keysym(s)
+        return syms[0][0] if syms else s
+
+    def translate_keymap(self, keymap):
+        km = {}
+        for desc, val in keymap.items():
+            if isinstance(desc, str):
+                chord = []
+                for ch in desc:
+                    chord.append(self.lookup_keysym(ch))
+                chord = tuple(sorted(chord))
+            elif isinstance(desc, Press):
+                chord = (desc.keycode,)
+
+            if isinstance(val, Shift):
+                if val.base is not None:
+                    km[chord] = val.base
+                km[(HOLD,)+chord] = val.hold
+            else:
+                km[chord] = val
+        return km
 
     def configure(self):
         #FIXME: place these in a class w defaults
@@ -58,9 +81,9 @@ class KeyboardChorder(object):
             quiet=self.set_quiet,
             conf=self.configure,
             switch=self.toggle_mode,
+            keymap={},
             Shift=Shift,
             Sym=Sym,
-            Ins=Ins,
             SHIFT=0x01,
             CTRL=0x04,
             ALT=ALT,
@@ -73,10 +96,6 @@ class KeyboardChorder(object):
         self.modThreshold = conf.modThreshold
         self.dispEagerness = 50
 
-        def code_s(s):
-            if s == 'HOLD': return HOLD
-            syms = self.im.lookup_keysym(s)
-            return syms[0][0] if syms else s
         self.unshifted = {}
         for k in range(8,255):
             sym = self.im.get_keyval(k,0)
@@ -84,25 +103,11 @@ class KeyboardChorder(object):
             if istext:
                 self.unshifted[k] = string
 
-        self.remap = {}
-        for desc, val in conf.chords.items():
-            if isinstance(desc, str):
-                chord = []
-                for ch in desc:
-                    chord.append(code_s(ch))
-                chord = tuple(sorted(chord))
-            elif isinstance(desc, Press):
-                chord = (desc.keycode,)
-
-            if isinstance(val, Shift):
-                if val.base is not None:
-                    self.remap[chord] = val.base
-                self.remap[(HOLD,)+chord] = val.hold
-            else:
-                self.remap[chord] = val
-        print(self.remap)
+        self.keymap = { k:self.translate_keymap(v) for k,v in conf.keymap.items() }
+        print(self.keymap)
         print(self.unshifted)
 
+        code_s = self.lookup_keysym
         self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.items()}
         self.ignore = { code_s(s) for s in conf.ignore}
         self.ch_char  = conf.ch_char
@@ -279,13 +284,12 @@ class KeyboardChorder(object):
                     if t2-t1 < th*(t1-t0):
                         return None
 
-        seq = self.remap.get(chord,None)
-        if isinstance(seq, Ins):
-            if self.mode == 'n':
-                seq = None
-            else:
-                seq = seq.txt
-        if seq is not None: return seq
+        remap = ChainMap(self.keymap['base'])
+        if self.mode != 'n':
+            remap.maps.insert(0,self.keymap['insert'])
+
+        if chord in remap:
+            return remap[chord]
 
         statemod = 0
         if modders:
