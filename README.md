@@ -5,4 +5,4 @@ This allows us to do some fancy stuff like:
 * Let the same key act both as character/action or modifier, depending on it's pressed alone or not
 * arbitrary translation of "chords" into key sequences, (for simple abbreviations, not as fancy as i e plover)
 
-Currently depends on BOTH python-xlib AND xpyb, but then also reimplements keymap logic itself (just because).
+Requires Python 3, Pygobject, Ibus and Gtk

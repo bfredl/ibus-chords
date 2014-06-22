@@ -148,8 +148,10 @@ class BaseEngine(IBus.Engine):
         #This is broken in latest Gvim (normal mode interprets preedit as commands => epic chaos)
         if self.vimfix:
             self.update_auxiliary_text(text, preedit_len > 0)
+            self.hide_preedit_text()
         else:
             self.update_preedit_text_with_mode(text, preedit_len, preedit_len > 0, IBus.PreeditFocusMode.CLEAR)
+            self.hide_auxiliary_text()
         self.__is_invalidate = False
 
     def lookup_keysym(self,keyval):
