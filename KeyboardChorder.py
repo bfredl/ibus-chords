@@ -28,7 +28,7 @@ ALT = 0x08
 LEVEL3 = 0x80
 HOLD = -1
 
-dbg = True
+dbg = False
 def runfile(fname, glob):
     with open(fname, 'rb') as f:
         exec(compile(f.read(), fname, 'exec'), glob, glob)
@@ -98,8 +98,8 @@ class KeyboardChorder(object):
         self.holdThreshold = conf.holdThreshold
         self.holdThreshold2 = conf.holdThreshold2
         self.chordTreshold = conf.chordTreshold
+        self.chordThreshold2 = conf.holdThreshold2
         self.modThreshold = conf.modThreshold
-        self.dispEagerness = 50
 
         self.unshifted = {}
         for k in range(8,255):
@@ -164,11 +164,11 @@ class KeyboardChorder(object):
 
     def on_new_sequence(self, keyval, keycode, state, time):
         if keycode in self.ignore:
-            return False 
+            return False
         self.seq = []
         self.down = {}
         self.dead = set()
-        self.seq_time = time 
+        self.seq_time = time
         self.seq_d = False
         self.last_nonchord = 0
         return True
@@ -194,10 +194,9 @@ class KeyboardChorder(object):
             return True
         if dbg:
             print('-', keysym_desc(keyval), time-self.seq_time)
-        print(self.down.keys(), self.dead)
         if self.down.keys() - self.dead:
-            hold = time - self.last_time >= self.holdThreshold
-            res = self.get_chord(time,keycode,hold)
+            print(time - self.last_time)
+            t, res = self.get_chord(time,keycode,time - self.last_time)
             if not res:
                 res = list(self.seq)
                 self.seq_d = True
@@ -228,7 +227,7 @@ class KeyboardChorder(object):
             for p in seq:
                 self.activate(p)
 
-    def display(self, seq,quiet=False):
+    def display(self, seq, quiet=False):
         if isinstance(seq, str):
             return seq
         elif isinstance(seq, list):
@@ -268,16 +267,14 @@ class KeyboardChorder(object):
 
     def update_display(self):
         t = time.time()*1000
-        tlast = t- self.last_time 
+        tlast = t- self.last_time
         if self.quiet and t - self.seq_time < 50:
             self.im.schedule(50+1,self.update_display)
             self.im.show_preedit('')
             return
         if set(self.down) - self.dead:
-            wait = (self.holdThreshold - self.dispEagerness) - tlast
-            chord = self.get_chord(self.last_time,0,wait<=0)
+            wait, chord = self.get_chord(self.last_time,0,tlast)
             if chord is None: chord = self.seq
-            print(self.seq, repr(chord))
             disp = self.display(chord,self.quiet)
             self.im.show_preedit(disp)
             if wait > 0:
@@ -285,18 +282,24 @@ class KeyboardChorder(object):
         else:
             self.im.show_preedit('')
 
-    def get_chord(self,time,keycode,hold):
+    # FIXME: cleanup the time/hold interface
+    def get_chord(self,time,keycode,thold):
         n = len(self.down)
         times = sorted( p.time for p in self.down.values())
         chord = tuple(sorted([ code for code in self.down.keys()]))
         basechord = chord
+        thres = self.holdThreshold if n<2 else self.holdThreshold2
+        hold = thold > thres
+        wtime = 0
         if hold:
             chord = (HOLD,)+chord
+        else:
+            wtime = thres-thold
         modders = set(basechord) &  self.modmap.keys()
         if len(self.dead) == 0:
             # risk of conflict with slightly overlapping sequence
             if n == 2 and not hold:
-                hold2 = time - times[-2] >= self.holdThreshold2
+                hold2 = time - times[-2] >= self.chordThreshold2
                 if keycode == self.seq[0].keycode and not hold2: # ab|ba is always chord
                     th = self.chordTreshold
                     if self.seq[0].keycode in modders:
@@ -304,10 +307,10 @@ class KeyboardChorder(object):
                     t0, t1 = times[-2:]
                     t2 = time
                     if t2-t1 < th*(t1-t0):
-                        return None
+                        return wtime, None
 
         try:
-            return self.remap[chord]
+            return wtime, self.remap[chord]
         except KeyError:
             pass
 
@@ -319,21 +322,21 @@ class KeyboardChorder(object):
                 if p.keycode not in modders:
                     modseq.append(Press(None,p.keycode,state,0))
             if modseq:
-                return modseq
+                return wtime, modseq
 
         if len(basechord) == 1 and hold:
             keycode, = basechord
-            return [Press(None,keycode,self.modmap[HOLD],0)]
+            return wtime, [Press(None,keycode,self.modmap[HOLD],0)]
 
         if len(basechord) == 2 and self.mode != '':
             try:
                 txt = [self.unshifted[c] for c in basechord]
             except KeyError:
-                return None
+                return wtime, None
             txt = ''.join(sorted(txt,key=self.chordorder.find))
 
-            return Command(txt,hold)
-        return None
+            return wtime, Command(txt,hold)
+        return wtime, None
 
 if __name__ == "__main__":
     import time
