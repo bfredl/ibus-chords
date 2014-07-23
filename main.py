@@ -58,8 +58,9 @@ class BaseEngine(IBus.Engine):
         self.keymap = Gdk.Keymap.get_default()
         self.keymap.connect('keys_changed', lambda *a: self.target.on_keymap_change())
 
-        #FIXME: handle this EPIC fail more systematically 
-        self.offset = 8
+        #FIXME: this is not guaranteed by the X standard
+        # but in X.org it seems to always be 8
+        self.min_keycode = 8
 
         self.vimfix = False
 
@@ -74,8 +75,8 @@ class BaseEngine(IBus.Engine):
         is_press = ((state & IBus.ModifierType.RELEASE_MASK) == 0)
         state &= ~IBus.ModifierType.RELEASE_MASK
         
-        # IBUS! this one you fucked up:
-        keycode += self.offset
+        # the IBus devs apparently forgot this:
+        keycode += self.min_keycode
 
         if is_press:
             if keycode in self.pressed:
@@ -130,7 +131,7 @@ class BaseEngine(IBus.Engine):
                 print( 'ERROR')
 
         # le sigh...
-        keycode -= self.offset
+        keycode -= self.min_keycode
         self.forward_key_event(keyval, keycode, state)
         self.forward_key_event(keyval, keycode, state | IBus.ModifierType.RELEASE_MASK)
 

@@ -15,6 +15,7 @@ desc_table = {
         'BackSpace': '◄',
         # FIXME: these from the modmap
         'Control_L': 'C-',
+        'Control_R': 'C-',
         'Escape': 'ESC',
         'Left': '',
         'Right': '',
@@ -227,23 +228,21 @@ class KeyboardChorder(object):
             for p in seq:
                 self.activate(p)
 
-    def display(self, seq, quiet=False):
+    def display(self, seq, quiet=False, alone=True):
         if isinstance(seq, str):
             return seq
         elif isinstance(seq, list):
-            return ''.join(self.display(p,quiet) for p in seq)
+            return ''.join(self.display(p,quiet,len(seq) == 1) for p in seq)
         elif isinstance(seq, Press):
             sym, code, state = seq[:3]
             if sym is None:
                 sym = self.im.get_keyval(code, state)
             istext, desc = keysym_desc(sym)
-            if quiet and not istext:
+            if (quiet or alone) and not istext:
                 return ''
             desc = desc_table.get(desc,desc)
             if state & CTRL:
-                if not quiet:
-                    desc = 'C-'+desc
-                else:
+                if quiet:
                     return ''
             return desc
         elif isinstance(seq, Command):
