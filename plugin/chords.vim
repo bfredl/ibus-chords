@@ -39,3 +39,19 @@ augroup KCCommand
     au VimLeave * python Kc_set_mode('e')
     au FocusGained * python Kc_set_mode('n')
 augroup END
+
+function! s:consume(nam)
+    let a = nr2char(getchar())
+    let b = nr2char(getchar())
+    echo "Invalid ". a:nam .": " . a . b
+    return ''
+endfunction
+map ×× <Plug>ch:
+map ÷÷ <Plug>CH:
+map! ×× <Plug>ch:
+map! ÷÷ <Plug>CH:
+map <Plug>ch: :call <SID>consume('chord')<CR>
+map <Plug>CH: :call <SID>consume('HCHORD')<CR>
+map! <Plug>ch: <c-r>=<SID>consume('chord')<CR>
+map! <Plug>CH: <c-r>=<SID>consume('HCHORD')<CR>
+
