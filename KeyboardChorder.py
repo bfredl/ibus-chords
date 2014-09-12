@@ -94,6 +94,7 @@ class KeyboardChorder(object):
             CTRL=0x04,
             ALT=ALT,
             LEVEL3=0x80,
+            on_reset=lambda: None
         )
         runfile(self.conf_file,conf.__dict__)
         self.holdThreshold = conf.holdThreshold
@@ -101,6 +102,7 @@ class KeyboardChorder(object):
         self.chordTreshold = conf.chordTreshold
         self.chordThreshold2 = conf.holdThreshold2
         self.modThreshold = conf.modThreshold
+        self.seqThreshold = conf.seqThreshold
 
         self.unshifted = {}
         for k in range(8,255):
@@ -120,9 +122,11 @@ class KeyboardChorder(object):
         self.ignore = { code_s(s) for s in conf.ignore}
         self.ch_char  = conf.ch_char
         self.chordorder = conf.chordorder
+        self.reset_callback = conf.on_reset
 
     def on_reset(self):
         self.set_mode('')
+        self.reset_callback()
 
     def set_quiet(self, val=None):
         if val is None:
@@ -170,7 +174,6 @@ class KeyboardChorder(object):
         self.down = {}
         self.dead = set()
         self.seq_time = time
-        self.seq_d = False
         self.last_nonchord = 0
         return True
 
@@ -180,15 +183,18 @@ class KeyboardChorder(object):
             return True
         p = Press(keyval, keycode, state, time)
         self.down[keycode] = p
-        if not self.seq_d:
-            self.seq.append(p)
-        else:
+        consumed = False
+        if time < self.last_nonchord + self.seqThreshold:
+            # prevent "thi" to become th[TI]
             self.dead.add(keycode)
+        else:
+            self.seq.append(p)
+            consumed = True
         self.last_time = time
         self.im.schedule(0,self.update_display)
         if dbg:
             print('+', keysym_desc(keyval), time-self.seq_time)
-        return not self.seq_d
+        return consumed
 
     def on_release(self, keyval, keycode,state,time,pressed):
         if keycode >= MAGIC:
@@ -200,10 +206,11 @@ class KeyboardChorder(object):
             t, res = self.get_chord(time,keycode,time - self.last_time)
             if not res:
                 res = list(self.seq)
-                self.seq_d = True
+                self.last_nonchord = time
         else:
             res = []
         self.dead.update([k for k in self.down if k != keycode])
+        self.dead.discard(keycode)
         self.seq = []
         del self.down[keycode]
         if res: self.im.show_preedit('')
@@ -211,6 +218,7 @@ class KeyboardChorder(object):
         self.last_time = time
         self.im.schedule(0,self.update_display)
         return True
+
     def on_repeat(self, *a):
         pass # (:
 
