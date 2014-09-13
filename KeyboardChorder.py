@@ -173,6 +173,7 @@ class KeyboardChorder(object):
         self.seq = []
         self.down = {}
         self.dead = set()
+        self.nonchord = set()
         self.seq_time = time
         self.last_nonchord = 0
         return True
@@ -183,18 +184,15 @@ class KeyboardChorder(object):
             return True
         p = Press(keyval, keycode, state, time)
         self.down[keycode] = p
-        consumed = False
+        self.seq.append(p)
         if time < self.last_nonchord + self.seqThreshold:
-            # prevent "thi" to become th[TI]
-            self.dead.add(keycode)
-        else:
-            self.seq.append(p)
-            consumed = True
+            # prevent "thi" to become th[HI]
+            self.nonchord.add(keycode)
         self.last_time = time
         self.im.schedule(0,self.update_display)
         if dbg:
             print('+', keysym_desc(keyval), time-self.seq_time)
-        return consumed
+        return True
 
     def on_release(self, keyval, keycode,state,time,pressed):
         if keycode >= MAGIC:
@@ -204,13 +202,15 @@ class KeyboardChorder(object):
         if self.down.keys() - self.dead:
             print(time - self.last_time)
             t, res = self.get_chord(time,keycode,time - self.last_time)
-            if not res:
+            if not res or keycode in self.nonchord:
                 res = list(self.seq)
                 self.last_nonchord = time
+                self.nonchord.update(self.down.keys() - self.dead)
         else:
             res = []
         self.dead.update([k for k in self.down if k != keycode])
         self.dead.discard(keycode)
+        self.nonchord.discard(keycode)
         self.seq = []
         del self.down[keycode]
         if res: self.im.show_preedit('')
@@ -279,8 +279,12 @@ class KeyboardChorder(object):
             self.im.schedule(50+1,self.update_display)
             self.im.show_preedit('')
             return
+        # TODO: factor out the "functional" logic from on_release and reuse
         if set(self.down) - self.dead:
-            wait, chord = self.get_chord(self.last_time,0,tlast)
+            if set(self.down) - self.nonchord:
+                wait, chord = self.get_chord(self.last_time,0,tlast)
+            else:
+                wait, chord = 0, list(self.seq)
             if chord is None: chord = self.seq
             disp = self.display(chord,self.quiet)
             self.im.show_preedit(disp)
