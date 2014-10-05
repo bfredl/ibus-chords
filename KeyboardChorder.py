@@ -200,7 +200,7 @@ class KeyboardChorder(object):
             return False
         self.seq = []
         self.down = {}
-        self.dead = set()
+        self.alive = set()
         self.nonchord = set()
         self.seq_time = time
         self.last_nonchord = 0
@@ -212,6 +212,7 @@ class KeyboardChorder(object):
             return True
         p = Press(keyval, keycode, state, time)
         self.down[keycode] = p
+        self.alive.add(keycode)
         self.seq.append(p)
         if time < self.last_nonchord + self.seqThreshold:
             # prevent "thi" to become th[HI]
@@ -231,9 +232,8 @@ class KeyboardChorder(object):
         is_chord, res = self.get_chord(time,keycode)
         if not is_chord: # sequential mode
             self.last_nonchord = time
-            self.nonchord.update(self.down.keys() - self.dead)
-        self.dead.update([k for k in self.down if k != keycode])
-        self.dead.discard(keycode)
+            self.nonchord.update(self.alive)
+        self.alive.clear()
         self.nonchord.discard(keycode)
         self.seq = []
         del self.down[keycode]
@@ -310,7 +310,7 @@ class KeyboardChorder(object):
             self.im.schedule(tvar.mindelta+1,self.update_display)
 
     def get_chord(self,time,keycode):
-        if not (self.down.keys() - self.dead):
+        if not self.alive:
             return True, []
         nonchord = False, list(self.seq)
         if keycode in self.nonchord:
@@ -324,18 +324,17 @@ class KeyboardChorder(object):
         if hold:
             chord = (HOLD,)+chord
         modders = set(basechord) &  self.modmap.keys()
-        if len(self.dead) == 0:
+        if len(self.alive) == 2 and n == 2 and not hold:
             # risk of conflict with slightly overlapping sequence
-            if n == 2 and not hold:
-                hold2 = time - times[-2] >= self.chordThreshold2
-                if keycode == self.seq[0].keycode and not hold2: # ab|ba is always chord
-                    th = self.chordTreshold
-                    if self.seq[0].keycode in modders:
-                        th = self.modThreshold
-                    t0, t1 = times[-2:]
-                    t2 = time
-                    if t2-t1 < th*(t1-t0):
-                        return nonchord
+            hold2 = time - times[-2] >= self.chordThreshold2
+            if keycode == self.seq[0].keycode and not hold2: # ab|ba is always chord
+                th = self.chordTreshold
+                if self.seq[0].keycode in modders:
+                    th = self.modThreshold
+                t0, t1 = times[-2:]
+                t2 = time
+                if t2-t1 < th*(t1-t0):
+                    return nonchord
 
         try:
             return True, self.remap[chord]
