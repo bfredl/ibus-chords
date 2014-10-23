@@ -8,6 +8,7 @@ from keysym import desc_to_keysym, keysym_desc
 import sys
 from functools import reduce, partial
 from types import SimpleNamespace
+from Logger import *
 
 # keeps track of time distance to closest condition that will change
 class Timevar:
@@ -71,6 +72,7 @@ class KeyboardChorder(object):
         self.im = im
         self.conf_file = path.expanduser('~/.config/chords')
         self.remap = ChainMap()
+        self.logger = Logger("keys")
         self.configure()
         self.on_reset()
         self.quiet = False
@@ -152,6 +154,8 @@ class KeyboardChorder(object):
         self.chordorder = conf.chordorder
         self.reset_callback = conf.on_reset
 
+        self.logger("config", list(self.modmap.items()), "(serialization of xkeymap", "(serialization of chordmaps)")
+
     def on_reset(self):
         self.set_mode('')
         self.reset_callback()
@@ -177,6 +181,7 @@ class KeyboardChorder(object):
 
     def set_mode(self, mode):
         print('mode', mode)
+        self.logger("set_mode", mode)
 
         self.mode = mode
         if mode == 'n':
@@ -193,13 +198,16 @@ class KeyboardChorder(object):
                 if p not in order:
                     order.append(p)
             n += 1
+        self.logger("set_keymap", order)
         self.remap.maps = [self.keymap[i] for i in order]
 
     def on_new_sequence(self, keyval, keycode, state, time):
         if keycode in self.ignore:
             return False
+        self.logger('newseq')
         self.seq = []
         self.down = {}
+        #FIXME: is a set; acts like a boolean
         self.alive = set()
         self.nonchord = set()
         self.seq_time = time
@@ -210,6 +218,7 @@ class KeyboardChorder(object):
         if keycode >= MAGIC:
             self.on_magic(keyval,keycode-MAGIC)
             return True
+        self.logger('press', keycode, state, keyval, keysym_desc(keyval), time-self.seq_time)
         p = Press(keyval, keycode, state, time)
         self.down[keycode] = p
         self.alive.add(keycode)
@@ -228,8 +237,16 @@ class KeyboardChorder(object):
             return True
         if dbg:
             print('-', keysym_desc(keyval), time-self.seq_time)
+        self.logger('release', keycode, state, keyval, keysym_desc(keyval), time-self.seq_time, bool(self.alive))
         print(time - self.last_time)
-        is_chord, res = self.get_chord(time,keycode)
+        self.im.schedule(0,self.update_display)
+        if not self.alive:
+            return
+        l = {}
+        is_chord, res = self.get_chord(time,keycode, log=l)
+        # FIXME: repr(res) is NOT best form
+        self.logger("emit", is_chord, repr(res), l["keycodes"], l["hold"], l["reason"])
+
         if not is_chord: # sequential mode
             self.last_nonchord = time
             self.nonchord.update(self.alive)
@@ -240,7 +257,6 @@ class KeyboardChorder(object):
         if res: self.im.show_preedit('')
         self.activate(res)
         self.last_time = time
-        self.im.schedule(0,self.update_display)
         return True
 
     def on_repeat(self, *a):
@@ -290,6 +306,7 @@ class KeyboardChorder(object):
 
     def on_magic(self, keyval, code):
         print('magic', keyval, code)
+        self.logger('magic', code, keyval)
         if code == 0:
             mode = chr(keyval)
             self.set_mode(mode)
@@ -309,12 +326,10 @@ class KeyboardChorder(object):
         if tvar.has_delta:
             self.im.schedule(tvar.mindelta+1,self.update_display)
 
-    def get_chord(self,time,keycode):
+    def get_chord(self,time,keycode, log={}):
         if not self.alive:
             return True, []
         nonchord = False, list(self.seq)
-        if keycode in self.nonchord:
-            return nonchord
         n = len(self.down)
         times = sorted( p.time for p in self.down.values())
         chord = tuple(sorted([ code for code in self.down.keys()]))
@@ -324,6 +339,11 @@ class KeyboardChorder(object):
         if hold:
             chord = (HOLD,)+chord
         modders = set(basechord) &  self.modmap.keys()
+        log['keycodes'] = list(basechord)
+        log['hold'] = hold
+        if keycode in self.nonchord:
+            log['reason'] = "prev_nonchord"
+            return nonchord
         if len(self.alive) == 2 and n == 2 and not hold:
             # risk of conflict with slightly overlapping sequence
             hold2 = time - times[-2] >= self.chordThreshold2
@@ -334,9 +354,11 @@ class KeyboardChorder(object):
                 t0, t1 = times[-2:]
                 t2 = time
                 if t2-t1 < th*(t1-t0):
+                    log['reason'] = 'close_seq'
                     return nonchord
 
         try:
+            log['reason'] = 'remap'
             return True, self.remap[chord]
         except KeyError:
             pass
@@ -349,10 +371,12 @@ class KeyboardChorder(object):
                 if p.keycode not in modders:
                     modseq.append(Press(None,p.keycode,state,0))
             if modseq:
+                log['reason'] = 'modders'
                 return True, modseq
 
         if len(basechord) == 1 and hold:
             keycode, = basechord
+            log['reason'] = 'onehold'
             return True, [Press(None,keycode,self.modmap[HOLD],0)]
 
         if len(basechord) == 2 and self.mode != '':
@@ -362,7 +386,9 @@ class KeyboardChorder(object):
                 return nonchord
             txt = ''.join(sorted(txt,key=self.chordorder.find))
 
+            log['reason'] = 'command'
             return True, Command(txt,hold)
+        log['reason'] = 'not_found'
         return nonchord
 
 if __name__ == "__main__":
