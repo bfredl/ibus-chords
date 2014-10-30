@@ -9,6 +9,7 @@ import sys
 from functools import reduce, partial
 from types import SimpleNamespace
 from Logger import *
+from operator import or_
 
 # keeps track of time distance to closest condition that will change
 class Timevar:
@@ -103,10 +104,11 @@ class KeyboardChorder(object):
 
     def configure(self):
         #FIXME: place these in a class w defaults
-        def Sym(s):
-            keysym = desc_to_keysym(s)
-            keycode, keyval = self.im.lookup_keysym(keysym)[0]
-            return Press(keysym, keycode, keyval, 0)
+        def Sym(*a):
+            mod = reduce(or_,a[:-1],0)
+            keysym = desc_to_keysym(a[-1])
+            keycode, state = self.im.lookup_keysym(keysym)[0]
+            return Press(keysym, keycode, mod+state, 0)
 
         conf = SimpleNamespace(
             pause=self.pause,
@@ -124,7 +126,7 @@ class KeyboardChorder(object):
             CTRL=0x04,
             ALT=ALT,
             LEVEL3=0x80,
-            on_reset=lambda: None
+            on_reset=lambda: None,
         )
         runfile(self.conf_file,conf.__dict__)
         self.holdThreshold = conf.holdThreshold
