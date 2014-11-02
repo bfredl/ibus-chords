@@ -201,8 +201,13 @@ class ChordEngine(BaseEngine):
     __gtype_name__ = 'ChordEngine'
     def __init__(self):
         super(ChordEngine, self).__init__()
-        from KeyboardChorder import KeyboardChorder
-        self.target = KeyboardChorder(self)
+        try:
+            from KeyboardChorder import KeyboardChorder
+            self.target = KeyboardChorder(self)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            sys.exit(111)
 
 class Test:
     def __init__(self, im):
