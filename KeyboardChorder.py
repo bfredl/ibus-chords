@@ -7,9 +7,11 @@ import time
 from keysym import desc_to_keysym, keysym_desc
 import sys
 from functools import reduce, partial
+from itertools import chain
 from types import SimpleNamespace
 from Logger import *
 from operator import or_
+import socket
 
 # keeps track of time distance to closest condition that will change
 class Timevar:
@@ -73,7 +75,8 @@ class KeyboardChorder(object):
         self.im = im
         self.conf_file = path.expanduser('~/.config/chords')
         self.remap = ChainMap()
-        self.logger = Logger("keys")
+        self.logger = DummyLogger()
+        self.real_logger = None
         self.configure()
         self.on_reset()
         self.quiet = False
@@ -127,6 +130,7 @@ class KeyboardChorder(object):
             ALT=ALT,
             LEVEL3=0x80,
             on_reset=lambda: None,
+            logs=False,
         )
         runfile(self.conf_file,conf.__dict__)
         self.holdThreshold = conf.holdThreshold
@@ -146,8 +150,6 @@ class KeyboardChorder(object):
         self.keymap = { k:self.translate_keymap(v) for k,v in conf.keymap.items() }
         self.parents = conf.parents
         self.km_abbr = conf.km_abbr
-        print(self.keymap)
-        print(self.unshifted)
 
         code_s = self.lookup_keysym
         self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.items()}
@@ -156,7 +158,27 @@ class KeyboardChorder(object):
         self.chordorder = conf.chordorder
         self.reset_callback = conf.on_reset
 
-        self.logger("config", list(self.modmap.items()), "(serialization of xkeymap", "(serialization of chordmaps)")
+        if conf.logs:
+            if self.real_logger is None:
+                self.real_logger = Logger("keys")
+            self.logger = self.real_logger
+        else:
+            self.logger = DummyLogger()
+        self.logger("config", list(self.modmap.items()), self.serialize_xkeymap(), self.serialize_keymap())
+
+    def serialize_xkeymap(self):
+        arr = []
+        modes = [0, SHIFT, LEVEL3, LEVEL3 | SHIFT]
+        for code in range(8,255):
+            ia = [self.im.get_keyval(code, s) for s in modes]
+            arr.append(ia)
+        return 
+
+    def serialize_keymap(self):
+        maps = {}
+        for name, keymap in self.keymap.items():
+            maps[name] = list([k, self.serialize_action(v)] for (k,v) in keymap.items())
+        return maps
 
     def on_reset(self):
         self.set_mode('')
@@ -182,7 +204,6 @@ class KeyboardChorder(object):
         self.update_mode()
 
     def set_mode(self, mode):
-        print('mode', mode)
         self.logger("set_mode", mode)
 
         self.mode = mode
@@ -192,7 +213,6 @@ class KeyboardChorder(object):
             self.set_keymap("insert")
 
     def set_keymap(self, name):
-        print('map', name)
         order = [name]
         n = 0
         while n < len(order):
@@ -230,24 +250,18 @@ class KeyboardChorder(object):
             self.nonchord.add(keycode)
         self.last_time = time
         self.im.schedule(0,self.update_display)
-        if dbg:
-            print('+', keysym_desc(keyval), time-self.seq_time)
         return True
 
     def on_release(self, keyval, keycode,state,time,pressed):
         if keycode >= MAGIC:
             return True
-        if dbg:
-            print('-', keysym_desc(keyval), time-self.seq_time)
         self.logger('release', keycode, state, keyval, keysym_desc(keyval), time-self.seq_time, bool(self.alive))
-        print(time - self.last_time)
         self.im.schedule(0,self.update_display)
         if not self.alive:
             return
         l = {}
         is_chord, res = self.get_chord(time,keycode, log=l)
-        # FIXME: repr(res) is NOT best form
-        self.logger("emit", is_chord, repr(res), l["keycodes"], l["hold"], l["reason"])
+        self.logger("emit", is_chord, self.serialize_action(res), l["keycodes"], l["hold"], l["reason"])
 
         if not is_chord: # sequential mode
             self.last_nonchord = time
@@ -303,11 +317,26 @@ class KeyboardChorder(object):
         else:
             return 'X'
 
+    def serialize_action(self, seq):
+        if isinstance(seq, str):
+            return [['str', seq]]
+        elif isinstance(seq, list):
+            return list(chain(self.serialize_action(a) for a in seq))
+        elif isinstance(seq, Press):
+            sym, code, state = seq[:3]
+            if sym is None:
+                sym = self.im.get_keyval(code, state)
+            desc = keysym_desc(sym)
+            return [['press', code, state, sym, desc]]
+        elif isinstance(seq, Command):
+            return [['cmd', seq.hold, seq.cmd]]
+        else:
+            return [['fun', repr(seq)]]
+
     def on_keymap_change(self):
         self.configure()
 
     def on_magic(self, keyval, code):
-        print('magic', keyval, code)
         self.logger('magic', code, keyval)
         if code == 0:
             mode = chr(keyval)
@@ -392,7 +421,3 @@ class KeyboardChorder(object):
             return True, Command(txt,hold)
         log['reason'] = 'not_found'
         return nonchord
-
-if __name__ == "__main__":
-    import time
-    KeyboardChorder().run()
