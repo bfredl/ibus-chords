@@ -29,6 +29,7 @@ import sys
 import getopt
 import locale
 import time
+from subprocess import call, check_output
 
 from keysym import desc_to_keysym, keysym_desc
 IDLE = 0
@@ -62,7 +63,7 @@ class BaseEngine(IBus.Engine):
         # but in X.org it seems to always be 8
         self.min_keycode = 8
 
-        self.vimfix = False
+        self.gvimfix = False
 
     def initialize(self):
         self.state = IDLE
@@ -99,7 +100,6 @@ class BaseEngine(IBus.Engine):
         grab = (self.state == GRABBED)
         if not self.pressed:
             self.state = IDLE
-        #print(self.state, self.pressed)
 
         if grab:
             if is_press:
@@ -147,7 +147,7 @@ class BaseEngine(IBus.Engine):
         text = IBus.Text.new_from_string(self.__preedit_string)
         text.set_attributes(attrs)
         #This is broken in latest Gvim (normal mode interprets preedit as commands => epic chaos)
-        if self.vimfix:
+        if self.gvimfix:
             self.update_auxiliary_text(text, preedit_len > 0)
             self.hide_preedit_text()
         else:
@@ -170,30 +170,34 @@ class BaseEngine(IBus.Engine):
         GLib.timeout_add(msecs, callback)
 
     def do_focus_in(self):
-        print('onfocus')
         #TODO: unbreak gvim instead
-        os.system("xprop -id `xdotool getwindowfocus` WM_CLASS")
-        self.vimfix = (os.system("xprop -id `xdotool getwindowfocus` WM_CLASS|grep Gvim > /dev/null") == 0)
-        chfix = os.system("xprop -id `xdotool getwindowfocus` WM_CLASS|grep chromium > /dev/null") == 0
-        if not self.vimfix:
+        #TODO: surely we can xlib somehow on py3?
+        wid = check_output(["xdotool", "getwindowfocus"]).strip()
+        cls = check_output(["xprop", "-id", wid, "WM_CLASS"])
+        self.gvimfix = cls.count(b"Gvim") > 0
+        chfix = cls.count(b"chromium") > 0
+        name = check_output(["xprop", "-id", wid, "WM_NAME"])
+        nvimfix = name.count(b" - VIM") > 0
+        if not self.gvimfix:
+            print("aaa")
             #gvim sometimes emits a TONNE of focus/defocus events
             #right after entering insert mode; ignore these
             self.target.on_reset()
+        #terminal vim (including nvim) cannot detect FocusIn: fake it
+        if nvimfix:
+            self.target.set_mode('n')
         self.target.set_quiet(chfix)
         self.register_properties(self.__prop_list)
         self.initialize()
 
     def do_focus_out(self):
-        print('on unfocus')
         pass
 
     def do_reset(self):
-        print('onreset')
-        if not self.vimfix:
+        if not self.gvimfix:
             self.target.on_reset()
 
     def do_property_activate(self, prop_name, state):
-        print("PropertyActivate(%s)" % prop_name)
         if prop_name == "command-mode":
             pass
 

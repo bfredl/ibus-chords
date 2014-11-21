@@ -172,7 +172,7 @@ class KeyboardChorder(object):
         for code in range(8,255):
             ia = [self.im.get_keyval(code, s) for s in modes]
             arr.append(ia)
-        return 
+        return arr
 
     def serialize_keymap(self):
         maps = {}
