@@ -21,6 +21,7 @@ def kc_magic(k,v):
     ic.process_key_event(ord(v),k+512-8,1<<30)
 
 Kc_set_mode = partial(kc_magic, 0)
+Kc_set_cmap = partial(kc_magic, 1)
 def Kc_insert():
     kc_magic(0,'i')
     try:
@@ -28,7 +29,10 @@ def Kc_insert():
     except:
         ft = vim.eval('&ft')
         chmap = chordmap.get(ft, None)
-    if chmap: kc_magic(1,chmap)
+    if chmap: 
+        Kc_set_cmap(chmap)
+    else:
+        Kc_set_mode('i')
 EOT
 
 augroup KCCommand

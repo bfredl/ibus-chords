@@ -7,7 +7,7 @@ import time
 from keysym import desc_to_keysym, keysym_desc
 import sys
 from functools import reduce, partial
-from itertools import chain
+from itertools import chain, product
 from types import SimpleNamespace
 from Logger import *
 from operator import or_
@@ -70,6 +70,8 @@ Press = namedtuple('Press', ['keyval','keycode','state','time'])
 Shift = namedtuple('Shift', ['base', 'hold'])
 Command = namedtuple('Command', ['cmd', 'hold'])
 MAGIC = 512
+def lookup(dct, val):
+    return [k for k,v in dct.items() if v == val]
 class KeyboardChorder(object):
     def __init__(self, im):
         self.im = im
@@ -92,17 +94,21 @@ class KeyboardChorder(object):
             if isinstance(desc, str):
                 chord = []
                 for ch in desc:
-                    chord.append(self.lookup_keysym(ch))
-                chord = tuple(sorted(chord))
+                    if ch == 'F':
+                        chord.append(lookup(self.modmap, LEVEL3))
+                        chord.append((HOLD,))
+                    else:
+                        chord.append(lookup(self.unshifted, ch))
             elif isinstance(desc, Press):
-                chord = (desc.keycode,)
-
-            if isinstance(val, Shift):
-                if val.base is not None:
-                    km[chord] = val.base
-                km[(HOLD,)+chord] = val.hold
-            else:
-                km[chord] = val
+                chord = [(desc.keycode,)]
+            for ch in product(*chord):
+                ch = tuple(sorted(ch))
+                if isinstance(val, Shift):
+                    if val.base is not None:
+                        km[ch] = val.base
+                    km[(HOLD,)+ch] = val.hold
+                else:
+                    km[ch] = val
         return km
 
     def configure(self):
@@ -147,12 +153,18 @@ class KeyboardChorder(object):
             if istext:
                 self.unshifted[k] = string
 
+        code_s = self.lookup_keysym
+        self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.items()}
+        for k,v in self.modmap.items():
+            #this is a bit brittle, but works under circumstances.
+            if v == LEVEL3:
+                self.unshifted[k] = 'T'
+
+        # NB: depends on modmap:
         self.keymap = { k:self.translate_keymap(v) for k,v in conf.keymap.items() }
         self.parents = conf.parents
         self.km_abbr = conf.km_abbr
 
-        code_s = self.lookup_keysym
-        self.modmap = { code_s(s) or s: mod for s, mod in conf.modmap.items()}
         self.ignore = { code_s(s) for s in conf.ignore}
         self.ch_char  = conf.ch_char
         self.chordorder = conf.chordorder
@@ -395,7 +407,7 @@ class KeyboardChorder(object):
             pass
 
         statemod = 0
-        if modders:
+        if modders and not (hold and self.mode):
             state = reduce(or_, (self.modmap[k] for k in modders),0)
             modseq = []
             for p in self.seq:
@@ -410,7 +422,7 @@ class KeyboardChorder(object):
             log['reason'] = 'onehold'
             return True, [Press(None,keycode,self.modmap[HOLD],0)]
 
-        if len(basechord) == 2 and self.mode != '':
+        if len(basechord) == 2 and self.mode:
             try:
                 txt = [self.unshifted[c] for c in basechord]
             except KeyError:
