@@ -2,25 +2,31 @@ python << EOT
 import vim
 from gi.repository import IBus
 from functools import partial
+from contextlib import contextmanager
 try:
     chordmap
 except:
     chordmap = {}
 
+ibus = IBus.Bus()
+
+@contextmanager
 def kc_ic_get():
-    bus = IBus.Bus()
     try:
-        return IBus.InputContext.get_input_context(bus.current_input_context(),bus.get_connection())
+        ic = IBus.InputContext.get_input_context(ibus.current_input_context(),ibus.get_connection())
+        yield ic
+        ic.destroy()
     except KeyError: #FIXME: correct error
-        return None
+        yield None
 
 def kc_magic(k,v):
-    ic = kc_ic_get()
-    if ic is None: return
-    ic.process_key_event(ord(v),k+512-8,0)
-    ic.process_key_event(ord(v),k+512-8,1<<30)
+    with kc_ic_get() as ic:
+        if ic is None: return
+        ic.process_key_event(ord(v),k+512-8,0)
+        ic.process_key_event(ord(v),k+512-8,1<<30)
 
 Kc_set_mode = partial(kc_magic, 0)
+Kc_set_cmap = partial(kc_magic, 1)
 def Kc_insert():
     kc_magic(0,'i')
     if int(vim.eval('exists("b:chordmap")')):
@@ -28,7 +34,10 @@ def Kc_insert():
     else:
         ft = vim.eval('&ft')
         chmap = chordmap.get(ft, None)
-    if chmap: kc_magic(1,chmap)
+    if chmap: 
+        Kc_set_cmap(chmap)
+    else:
+        Kc_set_mode('i')
 EOT
 
 augroup KCCommand
