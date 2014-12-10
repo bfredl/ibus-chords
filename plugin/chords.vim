@@ -3,21 +3,25 @@ import vim
 from gi.repository import IBus
 from functools import partial
 from contextlib import contextmanager
+has_nvim = int(vim.eval('has("nvim")'))
 try:
     chordmap
 except:
     chordmap = {}
 
-ibus = IBus.Bus()
+if has_nvim:
+    ibus = IBus.Bus()
 
 @contextmanager
 def kc_ic_get():
+    bus = ibus if has_nvim else IBus.Bus()
     try:
-        ic = IBus.InputContext.get_input_context(ibus.current_input_context(),ibus.get_connection())
+        ic = IBus.InputContext.get_input_context(bus.current_input_context(),bus.get_connection())
+    except Exception: #FIXME: correct error
+        yield None
+    else:
         yield ic
         ic.destroy()
-    except KeyError: #FIXME: correct error
-        yield None
 
 def kc_magic(k,v):
     with kc_ic_get() as ic:
