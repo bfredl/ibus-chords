@@ -33,9 +33,9 @@ Kc_set_mode = partial(kc_magic, 0)
 Kc_set_cmap = partial(kc_magic, 1)
 def Kc_insert():
     kc_magic(0,'i')
-    try:
+    if int(vim.eval('exists("b:chordmap")')):
         chmap = vim.eval('b:chordmap')
-    except:
+    else:
         ft = vim.eval('&ft')
         chmap = chordmap.get(ft, None)
     if chmap: 
