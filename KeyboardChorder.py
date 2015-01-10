@@ -11,7 +11,8 @@ from itertools import chain, product
 from types import SimpleNamespace
 from Logger import *
 from operator import or_
-import socket
+import zmq
+import traceback
 
 # keeps track of time distance to closest condition that will change
 class Timevar:
@@ -69,7 +70,6 @@ def runfile(fname, glob):
 Press = namedtuple('Press', ['keyval','keycode','state','time'])
 Shift = namedtuple('Shift', ['base', 'hold'])
 Command = namedtuple('Command', ['cmd', 'hold'])
-MAGIC = 512
 def lookup(dct, val):
     return [k for k,v in dct.items() if v == val]
 class KeyboardChorder(object):
@@ -82,6 +82,13 @@ class KeyboardChorder(object):
         self.configure()
         self.on_reset()
         self.quiet = False
+
+        ctx = zmq.Context.instance()
+        rtd = os.environ["XDG_RUNTIME_DIR"]
+        self.sock = ctx.socket(zmq.PULL)
+        self.sock.bind("ipc://{}/chords".format(rtd))
+        fd = self.sock.getsockopt(zmq.FD)
+        self.im.poll_read(fd, self.on_sock_poll)
 
     def lookup_keysym(self, s):
         if s == 'HOLD': return HOLD
@@ -123,12 +130,10 @@ class KeyboardChorder(object):
             pause=self.pause,
             quiet=self.set_quiet,
             conf=self.configure,
-            switch=self.toggle_mode,
             # Do you even curry?
             set_keymap=partial(partial,self.set_keymap),
             keymap={},
             parents={},
-            km_abbr={},
             Shift=Shift,
             Sym=Sym,
             SHIFT=0x01,
@@ -163,7 +168,6 @@ class KeyboardChorder(object):
         # NB: depends on modmap:
         self.keymap = { k:self.translate_keymap(v) for k,v in conf.keymap.items() }
         self.parents = conf.parents
-        self.km_abbr = conf.km_abbr
 
         self.ignore = { code_s(s) for s in conf.ignore}
         self.ch_char  = conf.ch_char
@@ -210,19 +214,13 @@ class KeyboardChorder(object):
     def pause(self):
         pass
 
-    def toggle_mode(self):
-        # HACK: generalize to n diffrent modes
-        self.set_mode('' if self.mode else 'n')
-        self.update_mode()
-
-    def set_mode(self, mode):
-        self.logger("set_mode", mode)
+    def set_mode(self, mode, keymap=None):
+        self.logger("set_mode", mode, keymap)
 
         self.mode = mode
-        if mode == 'n':
-            self.set_keymap("base")
-        else:
-            self.set_keymap("insert")
+        if keymap not in self.keymap:
+            keymap = "base" if mode == 'n' else "insert"
+        self.set_keymap(keymap)
 
     def set_keymap(self, name):
         order = [name]
@@ -249,9 +247,6 @@ class KeyboardChorder(object):
         return True
 
     def on_press(self, keyval, keycode, state, time, pressed):
-        if keycode >= MAGIC:
-            self.on_magic(keyval,keycode-MAGIC)
-            return True
         self.logger('press', keycode, state, keyval, keysym_desc(keyval), time-self.seq_time)
         p = Press(keyval, keycode, state, time)
         self.down[keycode] = p
@@ -265,8 +260,6 @@ class KeyboardChorder(object):
         return True
 
     def on_release(self, keyval, keycode,state,time,pressed):
-        if keycode >= MAGIC:
-            return True
         self.logger('release', keycode, state, keyval, keysym_desc(keyval), time-self.seq_time, bool(self.alive))
         self.im.schedule(0,self.update_display)
         if not self.alive:
@@ -348,13 +341,23 @@ class KeyboardChorder(object):
     def on_keymap_change(self):
         self.configure()
 
-    def on_magic(self, keyval, code):
-        self.logger('magic', code, keyval)
-        if code == 0:
-            mode = chr(keyval)
-            self.set_mode(mode)
-        elif code == 1:
-            self.set_keymap(self.km_abbr.get(chr(keyval),'insert'))
+    def on_sock_poll(self):
+        try: #FIXME: handle zmq errors?
+            while self.sock.getsockopt(zmq.EVENTS) & zmq.POLLIN:
+                msg = self.sock.recv_json()
+                self.on_msg(msg)
+        except Exception:
+            traceback.print_exc()
+
+        return True #continue watching
+
+    def on_msg(self, msg):
+        self.logger("msg", msg)
+        cmd = msg[0]
+        if cmd == "set_mode":
+            mode = msg[1]
+            keymap = msg[2] if len(msg) >= 3 else None
+            self.set_mode(mode, keymap)
 
     def update_display(self):
         t = time.time()*1000

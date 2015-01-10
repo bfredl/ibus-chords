@@ -169,6 +169,10 @@ class BaseEngine(IBus.Engine):
     def schedule(self,msecs, callback):
         GLib.timeout_add(msecs, callback)
 
+    # on_read shall return True to continue reading
+    def poll_read(self, fd, on_read):
+        GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT, GLib.IO_IN, lambda *a: on_read()) 
+
     def do_focus_in(self):
         #TODO: unbreak gvim instead
         #TODO: surely we can xlib somehow on py3?
