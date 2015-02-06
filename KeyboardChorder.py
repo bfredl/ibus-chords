@@ -126,12 +126,17 @@ class KeyboardChorder(object):
             keycode, state = self.im.lookup_keysym(keysym)[0]
             return Press(keysym, keycode, mod+state, 0)
 
+        # Do you even curry?
+        curry = partial(partial, partial)
+
         conf = SimpleNamespace(
             pause=self.pause,
             quiet=self.set_quiet,
             conf=self.configure,
-            # Do you even curry?
-            set_keymap=partial(partial,self.set_keymap),
+
+            set_keymap=curry(self.set_keymap),
+            lock=curry(self.toggle_lock),
+            unlock=partial(self.set_lock, None),
             keymap={},
             parents={},
             Shift=Shift,
@@ -218,12 +223,31 @@ class KeyboardChorder(object):
         self.logger("set_mode", mode, keymap)
 
         self.mode = mode
+        self.lock = None
         if keymap not in self.keymap:
             keymap = "base" if mode == 'n' else "insert"
-        self.set_keymap(keymap)
+        self.base_keymap = keymap
+        self.update_keymap()
 
     def set_keymap(self, name):
-        order = [name]
+        self.base_keymap = keymap
+        self.update_keymap()
+
+    def set_lock(self, name):
+        self.lock = name
+        self.update_keymap()
+
+    def toggle_lock(self, name):
+        if self.lock == name:
+            self.lock = None
+        else:
+            self.lock = name
+        self.update_keymap()
+
+    def update_keymap(self):
+        order = [self.base_keymap]
+        if self.lock:
+            order = [self.lock] + order
         n = 0
         while n < len(order):
             for p in self.parents.get(order[n],[]):
@@ -372,10 +396,17 @@ class KeyboardChorder(object):
         if tvar.has_delta:
             self.im.schedule(tvar.mindelta+1,self.update_display)
 
+    def nc_map(self, press):
+        if press.state == 0 and (press.keycode,) in self.remap:
+            return self.remap[(press.keycode,)]
+        return press
+
     def get_chord(self,time,keycode, log={}):
         if not self.alive:
             return True, []
-        nonchord = False, list(self.seq)
+        #FIXME: this is a quick hack for the current iteration
+        nonchord = False, [self.nc_map(i) for i in self.seq]
+        print(nonchord)
         n = len(self.down)
         times = sorted( p.time for p in self.down.values())
         chord = tuple(sorted([ code for code in self.down.keys()]))
@@ -385,6 +416,8 @@ class KeyboardChorder(object):
         if hold:
             chord = (HOLD,)+chord
         modders = set(basechord) &  self.modmap.keys()
+
+
         log['keycodes'] = list(basechord)
         log['hold'] = hold
         if keycode in self.nonchord:
@@ -403,6 +436,7 @@ class KeyboardChorder(object):
                     log['reason'] = 'close_seq'
                     return nonchord
 
+        print( self.alive, chord, self.remap.get(chord))
         try:
             log['reason'] = 'remap'
             return True, self.remap[chord]
@@ -420,7 +454,7 @@ class KeyboardChorder(object):
                 log['reason'] = 'modders'
                 return True, modseq
 
-        if len(basechord) == 1 and hold:
+        if len(basechord) == 1 and hold and HOLD in self.modmap:
             keycode, = basechord
             log['reason'] = 'onehold'
             return True, [Press(None,keycode,self.modmap[HOLD],0)]
