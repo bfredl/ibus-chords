@@ -2,15 +2,25 @@ python << EOT
 import vim
 
 # TODO: this belongs in a module
-import zmq
-import os, sys
-ctx = zmq.Context.instance()
-rtd = os.environ["XDG_RUNTIME_DIR"]
-s = ctx.socket(zmq.PUSH)
-s.connect("ipc://{}/chords".format(rtd))
-def Kc_set_mode(*args):
-    msg = ["set_mode"] + list(args)
-    s.send_json(msg)
+
+try:
+    import zmq
+    haszmq = True
+except ImportError:
+    haszmq = False
+
+if haszmq:
+    import os, sys
+    ctx = zmq.Context.instance()
+    rtd = os.environ["XDG_RUNTIME_DIR"]
+    s = ctx.socket(zmq.PUSH)
+    s.connect("ipc://{}/chords".format(rtd))
+    def Kc_set_mode(*args):
+        msg = ["set_mode"] + list(args)
+        s.send_json(msg)
+else:
+    def Kc_set_mode(*args):
+        pass
 
 def Kc_insert():
     if int(vim.eval('exists("b:chordmap")')):
