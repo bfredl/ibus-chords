@@ -45,6 +45,7 @@ function! s:consume(nam)
     echo "Invalid ". a:nam .": " . a . b
     return ''
 endfunction
+
 map ×× <Plug>ch:
 map ÷÷ <Plug>CH:
 map! ×× <Plug>ch:

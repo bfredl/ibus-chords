@@ -181,7 +181,7 @@ class BaseEngine(IBus.Engine):
         self.gvimfix = cls.count(b"Gvim") > 0
         chfix = cls.count(b"chromium") > 0
         name = check_output(["xprop", "-id", wid, "WM_NAME"])
-        nvimfix = name.count(b" - VIM") > 0
+        nvimfix = name.count(b" - NVIM") > 0
         if not self.gvimfix:
             print("aaa")
             #gvim sometimes emits a TONNE of focus/defocus events
