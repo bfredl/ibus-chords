@@ -1,7 +1,7 @@
-python << EOT
+python3 << EOT
 import vim
 
-# TODO: this belongs in a module
+# TODO: this belongs in an rplugin
 
 try:
     import zmq
@@ -32,11 +32,11 @@ EOT
 
 augroup KCCommand
     au!
-    au VimEnter * python Kc_set_mode('n')
-    au InsertEnter * python Kc_insert()
-    au InsertLeave * python Kc_set_mode('n')
-    au VimLeave * python Kc_set_mode('')
-    au FocusGained * python Kc_set_mode('n')
+    au VimEnter * py3 Kc_set_mode('n')
+    au InsertEnter * py3 Kc_insert()
+    au InsertLeave * py3 Kc_set_mode('n')
+    au VimLeave * py3 Kc_set_mode('')
+    au FocusGained * py3 Kc_set_mode('n')
 augroup END
 
 function! s:consume(nam)
@@ -48,10 +48,18 @@ endfunction
 
 map ×× <Plug>ch:
 map ÷÷ <Plug>CH:
-map! ×× <Plug>ch:
-map! ÷÷ <Plug>CH:
 map <Plug>ch: :call <SID>consume('chord')<CR>
 map <Plug>CH: :call <SID>consume('HCHORD')<CR>
+
+map! ×× <Plug>ch:
+map! ÷÷ <Plug>CH:
 map! <Plug>ch: <c-r>=<SID>consume('chord')<CR>
 map! <Plug>CH: <c-r>=<SID>consume('HCHORD')<CR>
+
+if has('nvim')
+    tmap ×× <Plug>ch:
+    tmap ÷÷ <Plug>CH:
+    tmap <expr> <Plug>ch: <SID>consume('chord')
+    tmap <expr> <Plug>CH: <SID>consume('HCHORD')
+endif
 
