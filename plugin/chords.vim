@@ -1,3 +1,6 @@
+if !has("python3")
+    finish
+endif
 python3 << EOT
 import vim
 
