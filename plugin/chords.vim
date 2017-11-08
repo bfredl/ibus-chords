@@ -12,34 +12,61 @@ try:
 except ImportError:
     haszmq = False
 
+kc_modemsg = None
+
 if haszmq:
     import os, sys
     ctx = zmq.Context.instance()
     rtd = os.environ["XDG_RUNTIME_DIR"]
     s = ctx.socket(zmq.PUSH)
     s.connect("ipc://{}/chords".format(rtd))
-    def Kc_set_mode(*args):
-        msg = ["set_mode"] + list(args)
+    def Kc_set_mode(mode, chmap=None):
+        global kc_modemsg
+        msg = ["set_mode", mode]
+        if mode == 'i':
+            if chmap is None:
+                chmap = get_chmap()
+            msg.append(chmap)
+
+        kc_modemsg = msg
         s.send_json(msg)
 else:
     def Kc_set_mode(*args):
         pass
 
-def Kc_insert():
+def get_chmap():
     if int(vim.eval('exists("b:chordmap")')):
         chmap = vim.eval('b:chordmap')
     else:
         chmap = vim.eval('&ft')
-    Kc_set_mode('i', chmap)
+    return chmap
+
+modes = []
+def Kc_push_mode(*args):
+    modes.append(kc_modemsg)
+    Kc_set_mode(*args)
+
+def Kc_pop_mode():
+    global kc_modemsg
+    kc_modemsg = modes.pop()
+    if haszmq:
+        s.send_json(kc_modemsg)
+
 EOT
 
 augroup KCCommand
     au!
     au VimEnter * py3 Kc_set_mode('n')
-    au InsertEnter * py3 Kc_insert()
+    au InsertEnter * py3 Kc_set_mode('i')
     au InsertLeave * py3 Kc_set_mode('n')
     au VimLeave * py3 Kc_set_mode('')
     au FocusGained * py3 Kc_set_mode('n')
+    if exists("##CmdlineEnter")
+        " set i but ignore keymaps
+        au CmdlineEnter * py3 Kc_push_mode('i', 'vim')
+        " TODO: use a stack to restore actual keymap
+        au CmdlineLeave * py3 Kc_pop_mode()
+    end
 augroup END
 
 function! s:consume(nam)
