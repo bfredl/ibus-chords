@@ -1,0 +1,60 @@
+
+if exists('$WINDOWID')
+    let g:chords_myid = $WINDOWID
+else
+    let g:chords_myid = "CURRENT"
+end
+
+if !has_key(g:,"chords_dir")
+    if exists('$XDG_RUNTIME_DIR')
+        let g:chords_dir = $XDG_RUNTIME_DIR."/chords"
+    else
+        let g:chords_dir = "/tmp/".$USER."_/chords"
+    endif
+endif
+
+let g:chord_path = g:bufmngr_dir.'/'.
+
+if !isdirectory(g:chords_dir)
+    call system(['mkdir', '-p', g:chords_dir])
+end
+
+function chords#set_mode(...)
+    let data = extend(['set_mode'], a:000)
+    call writefile(msgpackdump(data), s:path(a:id), 'b')
+end
+
+
+augroup KCCommand
+    au!
+    au VimEnter * py3 Kc_set_mode('n')
+    au InsertEnter * py3 Kc_insert()
+    au InsertLeave * py3 Kc_set_mode('n')
+    au VimLeave * py3 Kc_set_mode('')
+    au FocusGained * py3 Kc_set_mode('n')
+augroup END
+
+function! s:consume(nam)
+    let a = nr2char(getchar())
+    let b = nr2char(getchar())
+    echo "Invalid ". a:nam .": " . a . b
+    return ''
+endfunction
+
+map ×× <Plug>ch:
+map ÷÷ <Plug>CH:
+map <Plug>ch: :call <SID>consume('chord')<CR>
+map <Plug>CH: :call <SID>consume('HCHORD')<CR>
+
+map! ×× <Plug>ch:
+map! ÷÷ <Plug>CH:
+map! <Plug>ch: <c-r>=<SID>consume('chord')<CR>
+map! <Plug>CH: <c-r>=<SID>consume('HCHORD')<CR>
+
+if has('nvim')
+    tmap ×× <Plug>ch:
+    tmap ÷÷ <Plug>CH:
+    tmap <expr> <Plug>ch: <SID>consume('chord')
+    tmap <expr> <Plug>CH: <SID>consume('HCHORD')
+endif
+

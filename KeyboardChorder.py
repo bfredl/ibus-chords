@@ -377,6 +377,7 @@ class KeyboardChorder(object):
 
     def on_msg(self, msg):
         self.logger("msg", msg)
+        print(repr(msg))
         cmd = msg[0]
         if cmd == "set_mode":
             mode = msg[1]
