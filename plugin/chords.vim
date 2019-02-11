@@ -1,18 +1,27 @@
-if !has("python3")
-    finish
-endif
-python3 << EOT
-import vim
+let g:kc_path = "ipc://".$XDG_RUNTIME_DIR."/chords"
 
-# TODO: this belongs in an rplugin
+if luaeval("pcall(require,'lzmq')")
+  lua <<EOT
+
+  local zmq = require'lzmq'
+  local context = assert(zmq.context())
+  kc_socket = context:socket(zmq.PUSH)
+  kc_socket:connect(vim.api.nvim_get_var("kc_path"))
+EOT
+  function! Kc_send_json(msg)
+    call luaeval("kc_socket:send(_A)", json_encode(a:msg))
+  endfunction
+
+elseif has("python3")
+
+  python3 << EOT
+import vim
 
 try:
     import zmq
     haszmq = True
 except ImportError:
     haszmq = False
-
-kc_modemsg = None
 
 if haszmq:
     import os, sys
@@ -28,6 +37,14 @@ else:
         pass
 
 EOT
+
+  function! Kc_send_json(msg)
+    py3 Kc_sendjson(vim.eval('a:msg'))
+  endfunction
+else
+  function! Kc_send_json(msg)
+  endfunction
+end
 
 let g:kc_current_msg = []
 let g:kc_mode_stack = []
@@ -47,9 +64,8 @@ function! Kc_set_mode(mode, ...)
     call add(msg, chmap)
   end
   let g:kc_current_msg = msg
-  py3 Kc_sendjson(vim.vars['kc_current_msg'])
+  call Kc_send_json(msg)
 endfunction
-
 
 function! Kc_push_mode(...)
   call add(g:kc_mode_stack, g:kc_current_msg)
@@ -58,7 +74,7 @@ endfunction
 
 function! Kc_pop_mode()
   let g:kc_current_msg = remove(g:kc_mode_stack, -1)
-  py3 Kc_sendjson(vim.vars['kc_current_msg'])
+  call Kc_send_json(g:kc_current_msg)
 endfunction
 
 augroup KCCommand
