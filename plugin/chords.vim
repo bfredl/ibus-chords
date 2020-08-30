@@ -7,6 +7,25 @@ if luaeval("pcall(require,'lzmq')")
   local context = assert(zmq.context())
   kc_socket = context:socket(zmq.PUSH)
   kc_socket:connect(vim.api.nvim_get_var("kc_path"))
+  kc_sub = context:socket(zmq.SUB)
+  kc_sub:connect(vim.api.nvim_get_var("kc_path").."_status")
+  kc_sub:setopt_str(zmq.SUBSCRIBE, "")
+  lork = vim.api.nvim_get_var("kc_path").."_status"
+  kc_laststatus = ""
+  function kc_recv()
+    if not kc_sub:poll(10) then return nil end
+    local msg = kc_sub:recv()
+    kc_laststatus = msg
+    return msg
+  end
+  function checkit()
+    if kc_recv() then
+      vim.api.nvim_buf_set_lines(0, -1, -1, true, {kc_laststatus})
+    end
+  end
+  function foll()
+      vim.cmd "call timer_start(10, {i -> v:lua.checkit()}, {'repeat': -1})"
+  end
 EOT
   function! Kc_send_json(msg)
     call luaeval("kc_socket:send(_A)", json_encode(a:msg))

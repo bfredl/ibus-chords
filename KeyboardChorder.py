@@ -90,6 +90,10 @@ class KeyboardChorder(object):
         fd = self.sock.getsockopt(zmq.FD)
         self.im.poll_read(fd, self.on_sock_poll)
 
+        self.sock_status = ctx.socket(zmq.PUB)
+        self.sock_status.bind("ipc://{}/chords_status".format(rtd))
+        self.last_disp = ""
+
     def lookup_keysym(self, s):
         if s == 'HOLD': return HOLD
         syms = self.im.lookup_keysym(s)
@@ -396,6 +400,10 @@ class KeyboardChorder(object):
         self.im.show_preedit(disp)
         if tvar.has_delta:
             self.im.schedule(tvar.mindelta+1,self.update_display)
+        if disp != self.last_disp:
+            self.sock_status.send_json(dict(kind='cursor', text=disp))
+            self.last_disp = disp
+            print(dict(kind='cursor', text=disp))
 
     def nc_map(self, press):
         if press.state == 0 and (press.keycode,) in self.remap:
