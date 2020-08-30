@@ -18,12 +18,16 @@ if luaeval("pcall(require,'lzmq')")
     kc_laststatus = msg
     return msg
   end
+  local thebuf, thewin
   function checkit()
     if kc_recv() then
-      vim.api.nvim_buf_set_lines(0, -1, -1, true, {kc_laststatus})
+      vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {kc_laststatus})
+      vim.api.nvim_win_set_cursor(thewin, {vim.api.nvim_buf_line_count(thebuf), 9000})
     end
   end
   function foll()
+      thebuf = vim.api.nvim_get_current_buf()
+      thewin = vim.api.nvim_get_current_win()
       vim.cmd "call timer_start(10, {i -> v:lua.checkit()}, {'repeat': -1})"
   end
 EOT
