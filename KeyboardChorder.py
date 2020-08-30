@@ -295,6 +295,8 @@ class KeyboardChorder(object):
         l = {}
         is_chord, res = self.get_chord(time,keycode, log=l)
         self.logger("emit", is_chord, self.serialize_action(res), l["keycodes"], l["hold"], l["reason"])
+        self.sock_status.send_json(dict(kind='emit', val=(is_chord, self.serialize_action(res), l["keycodes"], l["hold"], l["reason"])))
+
 
         if not is_chord: # sequential mode
             self.last_nonchord = time
@@ -403,7 +405,7 @@ class KeyboardChorder(object):
         if disp != self.last_disp:
             self.sock_status.send_json(dict(kind='cursor', text=disp))
             self.last_disp = disp
-            print(dict(kind='cursor', text=disp))
+        print(dict(kind='cursor', text=disp))
 
     def nc_map(self, press):
         if press.state == 0 and (press.keycode,) in self.remap:
