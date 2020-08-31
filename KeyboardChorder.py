@@ -225,6 +225,8 @@ class KeyboardChorder(object):
 
     def set_mode(self, mode, keymap=None):
         self.logger("set_mode", mode, keymap)
+        if hasattr(self, "sock_status"):
+            self.sock_status.send_json(dict(kind='mode', mode=mode, keymap=keymap))
 
         self.mode = mode
         self.lock = None
@@ -295,7 +297,7 @@ class KeyboardChorder(object):
         l = {}
         is_chord, res = self.get_chord(time,keycode, log=l)
         self.logger("emit", is_chord, self.serialize_action(res), l["keycodes"], l["hold"], l["reason"])
-        self.sock_status.send_json(dict(kind='emit', val=(is_chord, self.serialize_action(res), l["keycodes"], l["hold"], l["reason"])))
+        self.sock_status.send_json(dict(kind='emit', is_chord=is_chord, action=self.serialize_action(res), keycodes=l["keycodes"], hold=l["hold"], reason=l["reason"]))
 
 
         if not is_chord: # sequential mode

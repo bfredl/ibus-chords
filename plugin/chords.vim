@@ -28,8 +28,8 @@ if luaeval("pcall(require,'lzmq')")
   end
   function on_msg(msg)
     local m = vim.fn.json_decode(msg)
-    if m.kind == "emit" then
-      vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {msg})
+    if m.kind ~= "cursor" then
+      vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, vim.split(vim.inspect(m),'\n',true))
       vim.api.nvim_win_set_cursor(thewin, {vim.api.nvim_buf_line_count(thebuf), 9000})
       vim.cmd "redraw!" -- IIIIH
     end
