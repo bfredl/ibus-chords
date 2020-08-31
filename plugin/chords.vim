@@ -27,10 +27,12 @@ if luaeval("pcall(require,'lzmq')")
     end
   end
   function on_msg(msg)
-    local json = vim.fn.json_decode(msg)
-    print(type(json))
-    vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {json.kind, msg})
-    vim.api.nvim_win_set_cursor(thewin, {vim.api.nvim_buf_line_count(thebuf), 9000})
+    local m = vim.fn.json_decode(msg)
+    if m.kind == "emit" then
+      vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {msg})
+      vim.api.nvim_win_set_cursor(thewin, {vim.api.nvim_buf_line_count(thebuf), 9000})
+      vim.cmd "redraw!" -- IIIIH
+    end
   end
   function foll()
       if not thebuf then
