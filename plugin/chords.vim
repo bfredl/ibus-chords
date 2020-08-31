@@ -18,16 +18,25 @@ if luaeval("pcall(require,'lzmq')")
     kc_laststatus = msg
     return msg
   end
-  local thebuf, thewin
+  -- TODOß HAIIIb
+  -- local thebuf, thewin
   function checkit()
-    if kc_recv() then
-      vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {kc_laststatus})
-      vim.api.nvim_win_set_cursor(thewin, {vim.api.nvim_buf_line_count(thebuf), 9000})
+    local msg = kc_recv()
+    if msg then
+      on_msg(msg)
     end
   end
+  function on_msg(msg)
+    local json = vim.fn.json_decode(msg)
+    print(type(json))
+    vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {json.kind, msg})
+    vim.api.nvim_win_set_cursor(thewin, {vim.api.nvim_buf_line_count(thebuf), 9000})
+  end
   function foll()
-      thebuf = vim.api.nvim_get_current_buf()
-      thewin = vim.api.nvim_get_current_win()
+      if not thebuf then
+          thebuf = vim.api.nvim_get_current_buf()
+          thewin = vim.api.nvim_get_current_win()
+      end
       vim.cmd "call timer_start(10, {i -> v:lua.checkit()}, {'repeat': -1})"
   end
 EOT
