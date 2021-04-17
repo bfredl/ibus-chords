@@ -29,14 +29,19 @@ if luaeval("pcall(require,'lzmq')")
     end
   end
   function on_msg(msg)
+    if not thewin or not vim.api.nvim_win_is_valid(thewin) then
+      return
+    end
     local m = vim.fn.json_decode(msg)
     local did = false
+    local farve
     if m.kind == "mode" then
       if m.keymap == vim.NIL then m.keymap = "" end
       if m.mode ~= lastmode or m.keymap ~= lastkeymap then
         if m.keymap ~= "" then
           -- TODO: too noisy with "" and "n", do it another way?
           vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {"mode: "..m.mode.." "..m.keymap})
+          farve = "MoreMsg"
         end
         lastmode = m.mode
         lastkeymap = m.keymap
@@ -49,15 +54,17 @@ if luaeval("pcall(require,'lzmq')")
         if a[1] == "str" then
           vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {"str: `"..a[2].."`"})
           did = true
+          farve = "Tag"
         elseif a[1] == "cmd" then
           local x = (a[2] and "CMD") or "cmd"
           vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {x..": "..vim.inspect(a[3])})
           did = true
-
+          farve = "IncSearch"
         elseif type(a[1]) == type({}) then
           local b = a[1]
           if b[1] == "press" then
-            vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {"knapp: `"..vim.inspect(b[5]).."`"})
+            --vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {"knapp: `"..vim.inspect(b[5]).."`"})
+            vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {"knapp: `"..(b[5][2]).."`"})
           else
             vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, {"grej: `"..vim.inspect(b).."`"})
           end
@@ -72,11 +79,14 @@ if luaeval("pcall(require,'lzmq')")
     if not did then
       vim.api.nvim_buf_set_lines(thebuf, -1, -1, true, vim.split(vim.inspect(m),'\n',true))
     end
+    if farve then
+      vim.api.nvim_buf_add_highlight(thebuf, 0, farve, vim.api.nvim_buf_line_count(thebuf)-1, 0, -1)
+    end
     vim.api.nvim_win_set_cursor(thewin, {vim.api.nvim_buf_line_count(thebuf), 9000})
     vim.cmd "redraw!" -- IIIIH
   end
-  function foll()
-      if not thebuf then
+  function keycast(force)
+      if force or not thebuf then
           thebuf = vim.api.nvim_get_current_buf()
           thewin = vim.api.nvim_get_current_win()
       end

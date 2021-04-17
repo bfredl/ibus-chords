@@ -20,7 +20,9 @@
 
 # for python2
 from __future__ import print_function
-
+import gi
+gi.require_version('Gdk', '3.0')
+gi.require_version('IBus', '1.0')
 from gi.repository import IBus
 from gi.repository import GLib, GObject, Gdk
 
@@ -57,6 +59,8 @@ class BaseEngine(IBus.Engine):
         #override this in subclass
         self.target = Test(self)
         self.keymap = Gdk.Keymap.get_default()
+        #display = Gdk.Display.get_default()
+        #self.keymap = Gdk.Keymap.get_for_display(display)
         self.keymap.connect('keys_changed', lambda *a: self.target.on_keymap_change())
 
         #FIXME: this is not guaranteed by the X standard
